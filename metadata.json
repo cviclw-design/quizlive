@@ -1,0 +1,6 @@
+{
+  "name": "VAW 2026 - Vigilance Awareness Quiz & Certification",
+  "description": "Comprehensive Vigilance Awareness Week 2026 interactive quiz, official CVC Integrity Pledge, ethical case scenarios, and verifiable e-Certificate generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

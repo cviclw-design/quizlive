@@ -1,0 +1,255 @@
+import React, { useState, useEffect } from 'react';
+import { api, QuizQuestionData, CertificateData, ParticipantData } from '../services/api';
+import { soundEffects } from '../utils/audio';
+import { ClwCertificateView } from './ClwCertificateView';
+import confetti from 'canvas-confetti';
+import { AlertCircle, ArrowLeft, RefreshCw } from 'lucide-react';
+
+interface ClwQuizViewProps {
+  participant: ParticipantData;
+  initialQuestions: QuizQuestionData[];
+  initialSeconds: number;
+  initialAnswers: Record<string, string>;
+  onHome: () => void;
+}
+
+export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
+  participant,
+  initialQuestions,
+  initialSeconds = 45,
+  initialAnswers = {},
+  onHome
+}) => {
+  const [questions] = useState<QuizQuestionData[]>(initialQuestions);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState(initialSeconds);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [certificate, setCertificate] = useState<CertificateData | null>(null);
+
+  const currentQ = questions[currentIndex];
+  const maxSeconds = initialSeconds || 45;
+
+  // Question countdown timer
+  useEffect(() => {
+    if (certificate || isSubmitting) return;
+
+    setTimeRemaining(maxSeconds);
+    setSelectedOption(null);
+    setErrorMessage('');
+
+    const timer = setInterval(() => {
+      setTimeRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleGrade('timeout');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentIndex, certificate, isSubmitting, maxSeconds]);
+
+  const handleSelect = (idx: number) => {
+    soundEffects.playClick();
+    setSelectedOption(String(idx));
+    setErrorMessage('');
+  };
+
+  const handleGrade = async (mode: 'answer' | 'skip' | 'timeout') => {
+    if (isSubmitting) return;
+
+    if (mode === 'answer' && selectedOption === null) {
+      soundEffects.playIncorrect();
+      setErrorMessage('Please select an option or choose "Not Answering".');
+      return;
+    }
+
+    const valueToSave = mode === 'skip' ? 'skip' : (mode === 'answer' ? (selectedOption ?? '') : '');
+
+    try {
+      soundEffects.playClick();
+      // Save answer to server
+      await api.saveAnswer(participant.pf, currentQ.id, valueToSave);
+    } catch (err: unknown) {
+      console.warn('Answer save notice:', err);
+    }
+
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      // Completed all 20 questions!
+      finishQuiz();
+    }
+  };
+
+  const finishQuiz = async () => {
+    setIsSubmitting(true);
+    try {
+      soundEffects.playFanfare();
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.6 }
+      });
+
+      // Submit on server
+      await api.submitQuiz(participant.pf);
+
+      // Load certificate
+      const certRes = await api.getCertificate(participant.pf);
+      if (certRes.ok && certRes.certificate) {
+        setCertificate(certRes.certificate);
+      }
+    } catch (err: unknown) {
+      console.error('Quiz submission error:', err);
+      // Fallback: try fetching certificate anyway
+      try {
+        const certRes = await api.getCertificate(participant.pf);
+        if (certRes.ok && certRes.certificate) {
+          setCertificate(certRes.certificate);
+        }
+      } catch {
+        alert('Assessment submitted! Refreshing certificate.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (certificate) {
+    return <ClwCertificateView cert={certificate} onHome={onHome} />;
+  }
+
+  if (isSubmitting) {
+    return (
+      <div className="max-w-md mx-auto py-16 px-4 text-center">
+        <RefreshCw className="w-10 h-10 text-blue-950 animate-spin mx-auto mb-3" />
+        <h2 className="text-lg font-bold text-slate-900">Finalising Assessment...</h2>
+        <p className="text-xs text-slate-500 mt-1">Generating official participation certificate.</p>
+      </div>
+    );
+  }
+
+  const timerPct = Math.max(0, (timeRemaining / maxSeconds) * 100);
+  const isTimerWarning = timeRemaining <= 10;
+  const progressPct = ((currentIndex + 1) / questions.length) * 100;
+
+  return (
+    <div className="max-w-3xl mx-auto py-8 px-4">
+      {/* Quiz Card */}
+      <div className="bg-white border border-[#eadcc4] rounded-2xl p-6 sm:p-8 shadow-md">
+        
+        {/* Quiz Header: Participant Info + Timer */}
+        <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <div className="text-[11px] font-bold tracking-widest text-[#8a6a12] uppercase mb-0.5">
+              CLW VAW 2026 ONLINE QUIZ
+            </div>
+            <div className="text-base sm:text-lg font-extrabold text-[#071a3a]">
+              Question {currentIndex + 1} of {questions.length}
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-0.5">
+              {participant.name} · PF {participant.pf} · {participant.department} · {participant.unit}
+            </div>
+          </div>
+
+          {/* Circular Countdown Timer */}
+          <div
+            className={`relative w-20 h-20 rounded-full flex items-center justify-center font-extrabold font-mono transition-colors shadow-xs ${
+              isTimerWarning
+                ? 'bg-red-50 text-red-600 ring-4 ring-red-400/40'
+                : 'bg-amber-50 text-amber-900 ring-4 ring-amber-400/30'
+            }`}
+          >
+            <div className="text-center">
+              <span className="text-2xl leading-none">{timeRemaining}</span>
+              <span className="text-[9px] block uppercase font-sans font-semibold tracking-wider opacity-70">
+                sec
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-[#efe6d6] h-2 rounded-full overflow-hidden my-5">
+          <div
+            className="h-full bg-gradient-to-r from-[#ff8a1e] to-[#128a45] transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+
+        {/* Question Statement */}
+        <div className="my-6">
+          <h2 className="text-lg sm:text-2xl font-serif font-bold text-[#071a3a] leading-snug">
+            {currentQ.question}
+          </h2>
+        </div>
+
+        {/* 4 Options */}
+        <div className="space-y-3 mb-6">
+          {currentQ.options.map((optionText, idx) => {
+            const isSelected = selectedOption === String(idx);
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleSelect(idx)}
+                className={`w-full p-4 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-3.5 cursor-pointer ${
+                  isSelected
+                    ? 'border-[#128a45] bg-[#eefbf3] text-[#071a3a] shadow-xs font-semibold ring-2 ring-[#128a45]/30'
+                    : 'border-[#eadcc4] bg-white text-slate-800 hover:border-[#d4a017] hover:bg-[#fffdf8]'
+                }`}
+              >
+                <span
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 mt-0.5 ${
+                    isSelected ? 'bg-[#128a45] text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {String.fromCharCode(65 + idx)}
+                </span>
+                <span className="flex-1 leading-snug mt-1">
+                  {optionText}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {errorMessage && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Actions Bar */}
+        <div className="flex items-center justify-between gap-4 pt-4 border-t border-[#eadcc4]">
+          <button
+            type="button"
+            onClick={() => handleGrade('skip')}
+            className="px-4 py-2.5 rounded-xl border border-[#eadcc4] text-xs font-bold text-[#071a3a] bg-white hover:bg-slate-50 transition-colors"
+          >
+            Not Answering (Skip: 0 Marks)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleGrade('answer')}
+            className="px-6 py-2.5 rounded-xl bg-[#128a45] hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+          >
+            <span>{currentIndex === questions.length - 1 ? 'Submit Final Paper' : 'Submit Answer'}</span>
+          </button>
+        </div>
+
+        {/* Scoring note */}
+        <div className="mt-4 text-center text-[11px] text-slate-400">
+          Scoring Rule: +1.0 for Correct · −0.5 for Wrong or Blank/Timeout · 0 for "Not Answering".
+        </div>
+      </div>
+    </div>
+  );
+};

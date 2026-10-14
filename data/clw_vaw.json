@@ -1,0 +1,490 @@
+{
+  "admins": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password_hash": "ClwVaw@2026",
+      "display_name": "Sugind Surendran",
+      "must_change": false,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 2,
+      "username": "cvoclwcrj@gmail.com",
+      "password_hash": "ClwVaw@2026",
+      "display_name": "Sugind Surendran",
+      "must_change": false,
+      "created_at": "2026-10-14 07:31:45"
+    }
+  ],
+  "settings": {
+    "cvo_name": "Sugind Surendran",
+    "cvo_designation": "SDGM & Chief Vigilance Officer",
+    "cvo_organization": "Chittaranjan Locomotive Works, Chittaranjan",
+    "signature_photo": null,
+    "seal_text": "CLW\nVIGILANCE\nCHITTARANJAN",
+    "logo_url": "https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png",
+    "quiz_seconds": 45,
+    "quiz_count": 20,
+    "enforce_schedule": false,
+    "slogan_hindi": "सत्यनिष्ठा से समृद्धि",
+    "slogan_english": "Probity for Prosperity",
+    "quiz_certificate_template": null,
+    "pledge_certificate_template": null,
+    "updated_at": "2026-10-14 07:31:45"
+  },
+  "questions": [
+    {
+      "id": 1,
+      "department": "All",
+      "question": "Vigilance Awareness Week 2026 is observed around the birth anniversary of which visionary leader?",
+      "option_a": "Mahatma Gandhi",
+      "option_b": "Sardar Vallabhbhai Patel",
+      "option_c": "Dr. B. R. Ambedkar",
+      "option_d": "Deshbandhu Chittaranjan Das",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 1,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 2,
+      "department": "All",
+      "question": "The theme of Vigilance Awareness Week 2026 is:",
+      "option_a": "Vigilance: Our Shared Responsibility",
+      "option_b": "Culture of Integrity for Nation’s Prosperity",
+      "option_c": "Probity for Prosperity",
+      "option_d": "Integrity for Development",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 2,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 3,
+      "department": "All",
+      "question": "The Central Vigilance Commission (CVC) is the apex vigilance body of the Central Government. It was set up in which year on the recommendation of the Santhanam Committee?",
+      "option_a": "1950",
+      "option_b": "1964",
+      "option_c": "1974",
+      "option_d": "1984",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 3,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 4,
+      "department": "All",
+      "question": "Chittaranjan Locomotive Works (CLW) is named after:",
+      "option_a": "Deshbandhu Chittaranjan Das",
+      "option_b": "Chittaranjan Das Gupta",
+      "option_c": "Lokmanya Tilak",
+      "option_d": "Netaji Subhas Chandra Bose",
+      "correct_index": 0,
+      "source": "sample",
+      "sort_order": 4,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 5,
+      "department": "All",
+      "question": "At a Production Unit of Indian Railways such as CLW, the vigilance organisation is headed by:",
+      "option_a": "Principal Chief Engineer (PCE)",
+      "option_b": "SDGM & Chief Vigilance Officer (CVO)",
+      "option_c": "Principal Financial Adviser (PFA)",
+      "option_d": "Chief Security Commissioner (RPF)",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 5,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 6,
+      "department": "All",
+      "question": "Preventive vigilance is best described as:",
+      "option_a": "Punishment after a charge sheet is proved",
+      "option_b": "Watchfulness, systemic improvements and transparency to stop irregularities before they occur",
+      "option_c": "A purely police and detective function",
+      "option_d": "An annual celebration without operational checks",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 6,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 7,
+      "department": "All",
+      "question": "PIDPI (Public Interest Disclosure and Protection of Informers) complaints are meant for:",
+      "option_a": "Public disclosures of corruption where the complainant’s identity is protected by CVC",
+      "option_b": "Posting grievances on public social media handles",
+      "option_c": "Filing routine leave or transfer appeals",
+      "option_d": "Publishing vendor brochures",
+      "correct_index": 0,
+      "source": "sample",
+      "sort_order": 7,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 8,
+      "department": "All",
+      "question": "Under Rule 13 of the Railway Services (Conduct) Rules 1966, a railway servant must avoid accepting gifts from:",
+      "option_a": "Any commercial firm, contractor or supplier having official dealings with the railway",
+      "option_b": "Blood relatives on official festivals",
+      "option_c": "Departmental staff sports club awards",
+      "option_d": "The President of India",
+      "correct_index": 0,
+      "source": "sample",
+      "sort_order": 8,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 9,
+      "department": "All",
+      "question": "A Conflict of Interest arises in official duties when:",
+      "option_a": "A public servant follows published tender criteria",
+      "option_b": "A private or familial interest may compromise or appear to affect an official decision",
+      "option_c": "A file is marked through proper departmental hierarchy",
+      "option_d": "An officer attends an official inspection during duty hours",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 9,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 10,
+      "department": "All",
+      "question": "On Government e-Marketplace (GeM), which procurement practice is strictly prohibited under Rule 157 of GFR?",
+      "option_a": "Comparing technical specifications objectively",
+      "option_b": "Splitting purchase indents or work estimates to evade higher financial sanction",
+      "option_c": "Selecting products under Direct Purchase within allowed thresholds",
+      "option_d": "Maintaining complete procurement audit trails",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 10,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 11,
+      "department": "All",
+      "question": "What is the Canon of Financial Propriety expected from every public officer handling expenditure?",
+      "option_a": "Spend budget quickly before financial year ends without vouchers",
+      "option_b": "Exercise the same degree of vigilance and prudence as a person of ordinary prudence would exercise for their own money",
+      "option_c": "Approve expenditures that directly benefit their own family",
+      "option_d": "Avoid obtaining financial concurrence for high-value tenders",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 11,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 12,
+      "department": "All",
+      "question": "Under the Information Technology Act 2000, sharing an officer’s Digital Signature Certificate (DSC) USB token and PIN with colleagues is:",
+      "option_a": "Permissible if verbally instructed by a supervisor",
+      "option_b": "A serious statutory and cyber security violation as DSC is legally personal to the subscriber",
+      "option_c": "Encouraged to speed up file movement during annual leaves",
+      "option_d": "Acceptable during weekend shifts",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 12,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 13,
+      "department": "All",
+      "question": "Under Section 8 of the Prevention of Corruption (Amendment) Act 2018, which party is explicitly liable for direct criminal prosecution?",
+      "option_a": "Only the receiver of bribe",
+      "option_b": "The person who gives or promises to give an undue advantage (bribe-giver)",
+      "option_c": "Only foreign companies",
+      "option_d": "No one is prosecuted under Section 8",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 13,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 14,
+      "department": "All",
+      "question": "Inflated measurements in a railway works contract are an irregularity that:",
+      "option_a": "Is normal practice on construction sites",
+      "option_b": "Can cause wrongful pecuniary loss to the railways and attracts vigilance / DAR proceedings",
+      "option_c": "Should be resolved without inspecting the site",
+      "option_d": "Falls exclusively under the Rajbhasha branch",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 14,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 15,
+      "department": "All",
+      "question": "What is the Central Vigilance Commission’s policy regarding post-tender negotiations?",
+      "option_a": "Negotiations can be held with all bidders simultaneously",
+      "option_b": "Post-tender negotiations are strictly banned, except in rare exceptional cases solely with the lowest valid bidder (L1)",
+      "option_c": "Negotiations can be conducted with any favorite bidder",
+      "option_d": "Bidders can increase their rates after price bids open",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 15,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 16,
+      "department": "All",
+      "question": "Periodic \"Rotational Transfers\" of railway staff in sensitive posts is implemented primarily to:",
+      "option_a": "Reduce office telephone expenses",
+      "option_b": "Break entrenched corrupt nexus with suppliers/contractors and uphold impartiality",
+      "option_c": "Cancel all past performance records",
+      "option_d": "Prevent staff from learning other skills",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 16,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 17,
+      "department": "All",
+      "question": "The Integrity Pledge taken during Vigilance Awareness Week is meant to:",
+      "option_a": "Grant immunity from past enquiries",
+      "option_b": "Reaffirm unconditional commitment to honesty, rule of law, and zero tolerance for corruption",
+      "option_c": "Replace official service conduct rules",
+      "option_d": "Waive property declaration requirements",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 17,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 18,
+      "department": "All",
+      "question": "If a railway employee discovers a suspected fraudulent voucher or cyber irregularity, what should they do?",
+      "option_a": "Destroy or shred the documents quietly",
+      "option_b": "Promptly bring it to official notice through the proper vigilance / administrative channel",
+      "option_c": "Share unverified allegations on private social media groups",
+      "option_d": "Ignore it if no direct personal loss is felt",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 18,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 19,
+      "department": "All",
+      "question": "Under Rule 15 of Railway Services (Conduct) Rules 1966, engaging in private trade or commercial employment requires:",
+      "option_a": "No permission if done on Sundays",
+      "option_b": "Previous sanction of the Competent Authority",
+      "option_c": "Only a verbal intimation to the peon",
+      "option_d": "A note written in personal diary",
+      "correct_index": 1,
+      "source": "sample",
+      "sort_order": 19,
+      "created_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 20,
+      "department": "All",
+      "question": "The core motto \"Probity for Prosperity (सत्यनिष्ठा से समृद्धि)\" conveys that:",
+      "option_a": "Integrity is a shared national duty fundamental to sustainable economic and institutional growth",
+      "option_b": "Integrity is required only when vigilance officers are inspecting",
+      "option_c": "Rules may be ignored if production volume is high",
+      "option_d": "Vigilance is restricted exclusively to the vigilance branch",
+      "correct_index": 0,
+      "source": "sample",
+      "sort_order": 20,
+      "created_at": "2026-10-14 07:31:45"
+    }
+  ],
+  "schedules": [
+    {
+      "id": 1,
+      "department": "Personnel",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 2,
+      "department": "Accounts",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 3,
+      "department": "Stores",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 4,
+      "department": "Electrical",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 5,
+      "department": "Mechanical",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 6,
+      "department": "Security (RPF)",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 7,
+      "department": "Signal & Telecom",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 8,
+      "department": "Engineering",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 9,
+      "department": "Traffic - Commercial & Operating",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 10,
+      "department": "Civil Engineering",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 11,
+      "department": "Medical",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 12,
+      "department": "General Administration",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    },
+    {
+      "id": 13,
+      "department": "Rajbhasha",
+      "starts_at": "2024-01-01 00:00:00",
+      "ends_at": "2026-11-16 23:59:00",
+      "updated_at": "2026-10-14 07:31:45"
+    }
+  ],
+  "participants": [
+    {
+      "id": 1,
+      "pf_no": "12345",
+      "name": "chandra",
+      "designation": "cvi",
+      "department": "Accounts",
+      "unit_name": "Chittaranjan Locomotive Works",
+      "mobile": "9999999999",
+      "created_at": "2026-10-14 17:10:36"
+    }
+  ],
+  "attempts": [
+    {
+      "id": 1,
+      "participant_id": 1,
+      "status": "submitted",
+      "started_at": "2026-10-14 17:10:36",
+      "submitted_at": "2026-10-14 17:10:36",
+      "score": -5,
+      "max_score": 10,
+      "question_ids": [
+        1,
+        12,
+        2,
+        3,
+        16,
+        20,
+        14,
+        4,
+        5,
+        18
+      ],
+      "answers_json": {}
+    },
+    {
+      "id": 2,
+      "participant_id": 1,
+      "status": "submitted",
+      "started_at": "2026-10-14 17:22:00",
+      "submitted_at": "2026-10-14 17:22:00",
+      "score": -5,
+      "max_score": 10,
+      "question_ids": [
+        15,
+        18,
+        12,
+        2,
+        3,
+        1,
+        9,
+        20,
+        8,
+        13
+      ],
+      "answers_json": {}
+    }
+  ],
+  "audit_log": [
+    {
+      "id": 4,
+      "created_at": "2026-10-14 17:04:01",
+      "actor": "admin",
+      "action": "admin_login",
+      "detail": "Login successful",
+      "ip": "103.68.141.238"
+    },
+    {
+      "id": 3,
+      "created_at": "2026-10-14 07:42:04",
+      "actor": "admin",
+      "action": "admin_logout",
+      "detail": "Logout",
+      "ip": "103.208.233.195"
+    },
+    {
+      "id": 2,
+      "created_at": "2026-10-14 07:41:49",
+      "actor": "admin",
+      "action": "admin_login",
+      "detail": "Login successful",
+      "ip": "103.208.233.195"
+    },
+    {
+      "id": 1,
+      "created_at": "2026-10-14 07:31:45",
+      "actor": "system",
+      "action": "init_database",
+      "detail": "Database initialized with official CLW VAW 2026 questions bank and settings",
+      "ip": "127.0.0.1"
+    }
+  ],
+  "seq": {
+    "admin": 2,
+    "question": 20,
+    "participant": 1,
+    "attempt": 2,
+    "audit": 4
+  }
+}
