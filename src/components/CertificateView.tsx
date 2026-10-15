@@ -9,6 +9,8 @@ interface CertificateProps {
   recipientName: string;
   designation?: string;
   organization?: string;
+  pf?: string;
+  rank?: number;
   date: string;
   certificateId: string;
   quizScore?: number;
@@ -28,6 +30,8 @@ export const CertificateView: React.FC<CertificateProps> = ({
   recipientName,
   designation,
   organization,
+  pf,
+  rank,
   date,
   certificateId,
   quizScore,
@@ -94,36 +98,94 @@ export const CertificateView: React.FC<CertificateProps> = ({
       const H = canvas.height; // 1414
       ctx.clearRect(0, 0, W, H);
 
-      // If Admin uploaded a template, paint it as the background and overlay Name & Designation only
-      if (templateUrl) {
+      // Certificate Template (Uploaded by Admin or official template)
+      const templateSrc = templateUrl || '/template_cert.jpg';
+      if (templateSrc) {
         const tplImg = new Image();
         tplImg.crossOrigin = 'anonymous';
         tplImg.onload = () => {
+          const W = 1536;
+          const H = 1024;
+          canvas.width = W;
+          canvas.height = H;
           ctx.drawImage(tplImg, 0, 0, W, H);
 
-          // Only name and designation will show through program
-          ctx.fillStyle = '#071a3a';
-          ctx.font = 'bold italic 76px Georgia, serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(recipientName || 'Valued Public Servant', W / 2, 700);
+          if (type === 'pledge') {
+            // 1. Cover "Certificate of Participation" on ribbon with "Certificate of Commitment"
+            ctx.save();
+            // Golden ribbon pill matching ribbon curve
+            ctx.beginPath();
+            roundRect(ctx, 420, 395, 696, 68, 34);
+            const ribGrad = ctx.createLinearGradient(420, 395, 1116, 463);
+            ribGrad.addColorStop(0, '#e5a93b');
+            ribGrad.addColorStop(0.3, '#fde68a');
+            ribGrad.addColorStop(0.7, '#d97706');
+            ribGrad.addColorStop(1, '#b45309');
+            ctx.fillStyle = ribGrad;
+            ctx.fill();
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
 
-          if (designation) {
+            ctx.fillStyle = '#451a03';
+            ctx.font = 'bold italic 38px Georgia, serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Certificate of Commitment', W / 2, 442);
+            ctx.restore();
+
+            // 2. Cover quiz competition body with smooth parchment patch and draw pledge wording
+            ctx.save();
+            const bGrad = ctx.createLinearGradient(340, 625, 1200, 795);
+            bGrad.addColorStop(0, 'rgba(250, 247, 238, 0.96)');
+            bGrad.addColorStop(0.5, 'rgba(254, 251, 244, 0.98)');
+            bGrad.addColorStop(1, 'rgba(250, 246, 237, 0.96)');
+            ctx.fillStyle = bGrad;
+            roundRect(ctx, 330, 622, 876, 175, 10);
+            ctx.fill();
+
+            ctx.textAlign = 'center';
             ctx.fillStyle = '#1e293b';
-            ctx.font = '600 34px Outfit, sans-serif';
-            ctx.fillText(designation, W / 2, 770);
+            ctx.font = '500 20px "Outfit", sans-serif';
+            ctx.fillText('has solemnly taken the Integrity Pledge organized during', W / 2, 650);
+
+            ctx.fillStyle = '#b91c1c';
+            ctx.font = 'bold 24px "Outfit", sans-serif';
+            ctx.fillText('Vigilance Awareness Week 2026', W / 2, 682);
+
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '600 20px "Outfit", sans-serif';
+            ctx.fillText('by Vigilance Department, Chittaranjan Locomotive Works.', W / 2, 712);
+
+            ctx.fillStyle = '#334155';
+            ctx.font = 'italic 16px Georgia, serif';
+            ctx.fillText('affirming commitment to uphold the highest standards of integrity, transparency,', W / 2, 746);
+            ctx.fillText('probity and an ethical workplace in all official dealings.', W / 2, 770);
+            ctx.restore();
           }
 
-          // Sub-footer verification
-          ctx.fillStyle = '#64748b';
-          ctx.font = '500 20px Outfit, sans-serif';
-          ctx.fillText(`Pledge ID: ${certificateId}   ·   Date: ${date}`, W / 2, 1340);
+          // Single line: Participant Name and Designation ONLY, directly above dotted line
+          const singleLine = designation
+            ? `${recipientName || 'Valued Public Servant'}, ${designation}`
+            : (recipientName || 'Valued Public Servant');
+
+          let fontSize = 28;
+          ctx.font = `bold ${fontSize}px Georgia, "Playfair Display", serif`;
+          while (ctx.measureText(singleLine).width > 820 && fontSize > 16) {
+            fontSize -= 1;
+            ctx.font = `bold ${fontSize}px Georgia, "Playfair Display", serif`;
+          }
+
+          // Render above the dotted line (dotted line is at row y = 612, blank area is y = 556-608)
+          ctx.fillStyle = '#071a3a';
+          ctx.textAlign = 'center';
+          ctx.fillText(singleLine, W / 2, 598);
 
           resolve(canvas);
         };
         tplImg.onerror = () => {
           paintStandard();
         };
-        tplImg.src = templateUrl;
+        tplImg.src = templateSrc;
         return;
       }
 
@@ -353,38 +415,47 @@ export const CertificateView: React.FC<CertificateProps> = ({
       </div>
 
       {/* Landscape Printable Canvas Frame */}
-      {templateUrl ? (
-        <article className="certificate-print-area relative bg-white border-4 border-[#071a3a] rounded-2xl shadow-2xl overflow-hidden w-full aspect-[1.414/1] flex flex-col justify-between">
-          {/* Admin Uploaded Template Background */}
+      {templateUrl || true ? (
+        <article className="certificate-print-area relative bg-white border-2 border-slate-300 rounded-2xl shadow-2xl overflow-hidden w-full aspect-[1.5/1]">
+          {/* Official Template Background */}
           <img
-            src={templateUrl}
+            src={templateUrl || '/template_cert.jpg'}
             alt="Pledge Certificate Template"
-            className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-0"
           />
 
-          {/* Program-Generated Fields Only: Name and Designation */}
-          <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 sm:p-12 md:p-16 text-center pointer-events-none">
-            {/* Top spacing allowing template artwork to shine */}
-            <div className="h-[40%]" />
-
-            {/* Program Content Center: ONLY Name and Designation */}
-            <div className="space-y-2 sm:space-y-4">
-              <div className="text-2xl sm:text-4xl md:text-5xl font-serif italic font-bold text-[#071a3a] drop-shadow-xs tracking-wide">
-                {recipientName || 'Valued Public Servant'}
+          {type === 'pledge' && (
+            <>
+              {/* Ribbon Overlay for Pledge: Certificate of Commitment */}
+              <div className="absolute top-[38.2%] left-0 right-0 z-10 flex items-center justify-center pointer-events-none">
+                <span className="bg-gradient-to-r from-amber-600 via-amber-400 to-amber-700 text-amber-950 px-6 sm:px-10 py-0.5 sm:py-1 rounded-full font-serif font-bold italic text-xs sm:text-base md:text-xl border-2 border-amber-800 shadow-md">
+                  Certificate of Commitment
+                </span>
               </div>
 
-              {designation && (
-                <div className="text-sm sm:text-lg md:text-2xl font-semibold text-slate-800">
-                  {designation}
-                </div>
-              )}
-            </div>
+              {/* Adapted Pledge Text Overlay */}
+              <div className="absolute top-[62%] left-[22%] right-[22%] z-10 text-center bg-[#fdfbf6]/90 rounded-xl p-1.5 sm:p-2 pointer-events-none">
+                <p className="text-[10px] sm:text-xs md:text-sm text-slate-800 font-medium leading-tight">
+                  has solemnly taken the Integrity Pledge organized during
+                </p>
+                <p className="text-[11px] sm:text-sm md:text-base font-bold text-rose-700 leading-tight">
+                  Vigilance Awareness Week 2026
+                </p>
+                <p className="text-[9px] sm:text-xs md:text-sm font-semibold text-slate-900 leading-tight">
+                  by Vigilance Department, Chittaranjan Locomotive Works.
+                </p>
+                <p className="text-[8px] sm:text-[10px] md:text-xs italic text-slate-600 mt-0.5 leading-tight">
+                  affirming commitment to uphold the highest standards of integrity and probity.
+                </p>
+              </div>
+            </>
+          )}
 
-            {/* Bottom Sub-footer */}
-            <div className="flex items-center justify-between text-[9px] sm:text-xs text-slate-500 font-semibold px-2 sm:px-4">
-              <span>Pledge ID: {certificateId}</span>
-              <span>Date: {date}</span>
-            </div>
+          {/* Participant Name and Designation ONLY - in a SINGLE line, directly ABOVE the dotted line */}
+          <div className="absolute top-[55.2%] left-0 right-0 z-10 flex items-center justify-center text-center px-6 sm:px-12 pointer-events-none">
+            <span className="font-serif font-bold text-[#071a3a] text-xs sm:text-base md:text-xl lg:text-2xl drop-shadow-xs tracking-wide truncate max-w-[85%]">
+              {recipientName || 'Valued Public Servant'}{designation ? `, ${designation}` : ''}
+            </span>
           </div>
         </article>
       ) : (
@@ -493,7 +564,7 @@ export const CertificateView: React.FC<CertificateProps> = ({
                 <div className="h-16 flex items-center justify-center sm:justify-end mb-1">
                   {signaturePhoto ? (
                     <img
-                      src={signaturePhoto}
+                      src={signaturePhoto || undefined}
                       alt="SDGM & CVO Signature"
                       className="max-h-16 max-w-[200px] object-contain pointer-events-none"
                     />

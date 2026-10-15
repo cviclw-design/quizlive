@@ -55,6 +55,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
   const [liveDept, setLiveDept] = useState<string>('All');
   const [liveLoading, setLiveLoading] = useState<boolean>(false);
   const [liveActionMsg, setLiveActionMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [adminCountdown, setAdminCountdown] = useState<number | null>(null);
 
   // Login form state
   const [loginUser, setLoginUser] = useState('admin');
@@ -98,6 +99,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
   const [settingsSuccess, setSettingsSuccess] = useState('');
   const [settingsError, setSettingsError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const templateFileInputRef = useRef<HTMLInputElement>(null);
 
   // Schedule state
   const [schedules, setSchedules] = useState<{ id: number; department: string; starts_at: string; ends_at: string }[]>([]);
@@ -240,6 +242,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
     };
   }, [activeTab]);
 
+  // Real-time ticking countdown timer for Admin Panel
+  useEffect(() => {
+    if (activeTab !== 'live' || !liveAdminState) {
+      setAdminCountdown(null);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (liveAdminState.status === 'question' && liveAdminState.questionEndTime) {
+        const remaining = Math.max(0, Math.ceil((liveAdminState.questionEndTime - now) / 1000));
+        setAdminCountdown(remaining);
+      } else if (liveAdminState.status === 'review' && liveAdminState.reviewStartTime) {
+        const elapsed = Math.floor((now - liveAdminState.reviewStartTime) / 1000);
+        const autoRem = Math.max(0, 5 - elapsed);
+        setAdminCountdown(autoRem);
+      } else {
+        setAdminCountdown(null);
+      }
+    }, 200);
+
+    return () => clearInterval(timer);
+  }, [activeTab, liveAdminState]);
+
   const handleStartLobby = async () => {
     setLiveLoading(true);
     setLiveActionMsg(null);
@@ -267,6 +293,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       loadLiveAdminState();
     } catch (err) {
       console.error('Failed setting timer', err);
+    }
+  };
+
+  const handleSetLiveQuestionCount = async (count: number) => {
+    setLiveQuestionCount(count);
+    try {
+      soundEffects.playClick();
+      await api.adminSetLiveQuestionCount(count);
+      loadLiveAdminState();
+      setLiveActionMsg({ text: `Question count set to ${count} for live quiz.`, isError: false });
+    } catch (err) {
+      console.error('Failed setting question count', err);
     }
   };
 
@@ -527,6 +565,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
         cvo_designation: settings.cvo_designation,
         cvo_organization: settings.cvo_organization,
         signature_photo: settings.signature_photo,
+        quiz_certificate_template: settings.quiz_certificate_template,
         seal_text: settings.seal_text,
         quiz_seconds: Number(settings.quiz_seconds),
         quiz_count: Number(settings.quiz_count),
@@ -536,7 +575,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       if (res.ok) {
         soundEffects.playCorrect();
         setSettings(res.settings);
-        setSettingsSuccess('Signature & Certificate configuration saved successfully! All generated certificates now display this signature.');
+        setSettingsSuccess('Signature & Certificate configuration saved successfully! All generated certificates now display these settings.');
         if (onSettingsUpdated) {
           onSettingsUpdated();
         }
@@ -550,6 +589,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
   const handleRemoveSignature = () => {
     if (!settings) return;
     setSettings({ ...settings, signature_photo: null });
+  };
+
+  const handleTemplateFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, JPEG, WEBP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const base64 = ev.target?.result as string;
+      if (settings) {
+        setSettings({ ...settings, quiz_certificate_template: base64 });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveTemplate = () => {
+    if (!settings) return;
+    setSettings({ ...settings, quiz_certificate_template: null });
   };
 
   // --- Schedule ---
@@ -1080,6 +1143,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
             </div>
 
             <div className="flex items-center gap-2.5">
+              {/* Real-time Live Question Timer Display for Admin */}
+              {liveAdminState?.status === 'question' && (
+                <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-slate-950/80 border border-amber-500/50 shadow-inner">
+                  <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-amber-300 tracking-wider flex items-center gap-1">
+                      <span>Timer</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping inline-block" />
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-xl sm:text-2xl font-mono font-black ${
+                        (adminCountdown ?? 30) <= 5 ? 'text-rose-400 animate-pulse' : (adminCountdown ?? 30) <= 10 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {adminCountdown !== null ? adminCountdown : (liveAdminState.activeQuestion?.timerSeconds || liveAdminState.timerSeconds)}s
+                      </span>
+                      <span className="text-[10px] text-slate-400">left</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Real-time Review / Auto-Advance Countdown for Admin */}
+              {liveAdminState?.status === 'review' && (
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-950/50 border border-amber-400/60 shadow-inner">
+                  <Clock className="w-5 h-5 text-amber-400 animate-spin" />
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-amber-300 tracking-wider">
+                      Auto-Advance
+                    </div>
+                    <div className="text-xs font-mono font-bold text-amber-200">
+                      Next in {adminCountdown !== null ? adminCountdown : 5}s
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <a
                 href="?page=live"
                 target="_blank"
@@ -1176,7 +1275,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
               </div>
             </div>
 
-            {/* Action Buttons Bar */}
+            {/* Question Count Configurator (Determined by Admin) */}
+            <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-indigo-950 mb-0.5">
+                    Live Quiz Question Count (Determined by Admin)
+                  </label>
+                  <p className="text-[11px] text-slate-600">
+                    Admin sets how many questions to present during this live competition session.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {[5, 10, 15, 20, 25, 30].map(cnt => (
+                    <button
+                      key={cnt}
+                      type="button"
+                      onClick={() => handleSetLiveQuestionCount(cnt)}
+                      className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-all ${
+                        liveQuestionCount === cnt
+                          ? 'bg-indigo-600 border-indigo-700 text-white shadow-xs'
+                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {cnt} Qs
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 border-t border-indigo-200/60">
+                <span className="text-xs font-semibold text-slate-700">Custom Count:</span>
+                <input
+                  type="number"
+                  min={3}
+                  max={questions.length || 100}
+                  value={liveQuestionCount}
+                  onChange={e => setLiveQuestionCount(Number(e.target.value))}
+                  className="w-24 px-3 py-1.5 text-xs font-mono font-bold border border-slate-300 rounded-lg bg-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSetLiveQuestionCount(liveQuestionCount)}
+                  className="px-3.5 py-1.5 bg-indigo-950 hover:bg-indigo-900 text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer"
+                >
+                  Apply Question Count
+                </button>
+                <span className="text-xs text-slate-500 font-medium">
+                  (Available in Bank: {questions.length} questions)
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons Bar - KEPT LIVE AT ALL TIMES */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               {/* Start Lobby Button */}
               {(!liveAdminState || liveAdminState.status === 'idle' || liveAdminState.status === 'ended') && (
@@ -1186,7 +1338,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Play className="w-4 h-4" />
-                  <span>Open Live Lobby (Allow Registration)</span>
+                  <span>Open Live Lobby ({liveQuestionCount} Questions, {liveTimerSeconds}s)</span>
                 </button>
               )}
 
@@ -1202,28 +1354,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </button>
               )}
 
-              {/* Reveal Answer (during active question) */}
-              {liveAdminState?.status === 'question' && (
+              {/* Reveal Answer Button - Kept Live during Question, Time Lapsed, or Review */}
+              {(liveAdminState?.status === 'question' || liveAdminState?.status === 'time_lapsed' || liveAdminState?.status === 'review') && (
                 <button
                   onClick={handleRevealAnswer}
                   disabled={liveLoading}
-                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                  className={`px-5 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer ${
+                    liveAdminState.status === 'review'
+                      ? 'bg-amber-100 border border-amber-300 text-amber-950 hover:bg-amber-200'
+                      : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                  }`}
+                  title="Reveal correct answer and display leaderboard scores to all participants"
                 >
                   <Eye className="w-4 h-4" />
-                  <span>Reveal Correct Answer &amp; Scores</span>
+                  <span>
+                    {liveAdminState.status === 'review'
+                      ? '✓ Answer & Scores Revealed'
+                      : 'Reveal Correct Answer & Scores'}
+                  </span>
                 </button>
               )}
 
-              {/* Next Question (during review) */}
-              {liveAdminState?.status === 'review' && (
+              {/* Next Question Button - Kept Live during active question, time lapsed, or review! */}
+              {(liveAdminState?.status === 'review' || liveAdminState?.status === 'question' || liveAdminState?.status === 'time_lapsed') && (
                 <button
                   onClick={handleNextQuestion}
                   disabled={liveLoading}
                   className="px-5 py-2.5 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                  title="Advance immediately to next question (or skip 5-second wait)"
                 >
                   <FastForward className="w-4 h-4 text-amber-300" />
-                  <span>Next Question ({((liveAdminState.currentIndex || 0) + 2)} of {liveAdminState.questionCount})</span>
+                  <span>
+                    Next Question ({((liveAdminState.currentIndex || 0) + 2)} of {liveAdminState.questionCount || liveQuestionCount}) [Advance Now]
+                  </span>
                 </button>
+              )}
+
+              {/* 5-Second Auto-Advance Countdown Indicator */}
+              {liveAdminState?.status === 'review' && (
+                <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-900 text-amber-300 text-xs font-mono border border-slate-700">
+                  <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <span>
+                    {liveAdminState.autoAdvance !== false
+                      ? 'Auto-advancing in 5s (or click Next Question)'
+                      : 'Auto-advance paused'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const next = !liveAdminState.autoAdvance;
+                      await api.adminToggleLiveAutoAdvance(next);
+                      loadLiveAdminState();
+                    }}
+                    className="text-[10px] uppercase font-bold text-amber-400 underline hover:text-white ml-1 cursor-pointer"
+                  >
+                    {liveAdminState.autoAdvance !== false ? 'Pause' : 'Resume'}
+                  </button>
+                </div>
               )}
 
               {/* End Quiz Button */}
@@ -1252,14 +1439,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
           {/* Active Question Live Monitor */}
           {liveAdminState?.activeQuestion && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-white shadow-md space-y-4">
-              <div className="flex items-center justify-between gap-3 pb-2 border-b border-slate-800">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                  Live Question Monitor: #{((liveAdminState.activeQuestion.index || 0) + 1)} of {liveAdminState.activeQuestion.total}
-                </span>
-                <span className="text-xs font-mono text-slate-400">
-                  Time Limit: {liveAdminState.activeQuestion.timerSeconds || liveAdminState.timerSeconds}s
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full">
+                    Live Question #{((liveAdminState.activeQuestion.index || 0) + 1)} of {liveAdminState.activeQuestion.total}
+                  </span>
+                  <span className="text-xs font-mono text-slate-400">
+                    Limit: {liveAdminState.activeQuestion.timerSeconds || liveAdminState.timerSeconds}s
+                  </span>
+                </div>
+
+                {/* Live Ticking Countdown Badge for Admin */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/60 border border-slate-700">
+                    <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                    <span className="text-xs text-slate-400 font-semibold">Timer:</span>
+                    <span className={`text-sm sm:text-base font-mono font-bold ${
+                      (adminCountdown ?? 30) <= 5 ? 'text-rose-400 animate-pulse' : (adminCountdown ?? 30) <= 10 ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      {liveAdminState.status === 'question'
+                        ? `${adminCountdown !== null ? adminCountdown : (liveAdminState.activeQuestion.timerSeconds || liveAdminState.timerSeconds)}s remaining`
+                        : liveAdminState.status === 'review'
+                        ? `Answer revealed · ${adminCountdown !== null ? adminCountdown : 5}s to next`
+                        : 'Completed'}
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Real-time Visual Countdown Bar for Admin */}
+              {liveAdminState.status === 'question' && (
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-200 rounded-full ${
+                      (adminCountdown ?? 30) <= 5 ? 'bg-rose-500' : (adminCountdown ?? 30) <= 10 ? 'bg-amber-400' : 'bg-emerald-500'
+                    }`}
+                    style={{
+                      width: `${Math.min(100, Math.max(0, ((adminCountdown ?? liveAdminState.timerSeconds) / (liveAdminState.activeQuestion.timerSeconds || liveAdminState.timerSeconds || 30)) * 100))}%`
+                    }}
+                  />
+                </div>
+              )}
 
               <h4 className="text-base sm:text-lg font-serif font-bold text-white">
                 {liveAdminState.activeQuestion.question}
@@ -1805,6 +2025,106 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
             )}
 
             <form onSubmit={handleSaveSettings} className="space-y-6">
+              {/* Certificate Template Section */}
+              <div className="p-5 border-2 border-dashed border-amber-300 rounded-xl bg-amber-50/30">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Official Certificate Template (Background Image)
+                  </label>
+                  {settings.quiz_certificate_template && (
+                    <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                      ✓ Custom Template Active
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col lg:flex-row items-center gap-6">
+                  {/* Template Preview Box */}
+                  <div className="w-full lg:w-96 aspect-[1.414/1] bg-white border-2 border-slate-300 rounded-xl shadow-xs relative overflow-hidden flex flex-col justify-between p-3 text-center">
+                    {settings.quiz_certificate_template ? (
+                      <>
+                        <img
+                          src={settings.quiz_certificate_template}
+                          alt="Certificate Template Preview"
+                          className="absolute inset-0 w-full h-full object-fill pointer-events-none"
+                        />
+                        <div className="relative z-10 w-full h-full flex flex-col justify-between py-2 text-center pointer-events-none">
+                          <div className="h-[30%]" />
+                          <div className="space-y-0.5">
+                            <div className="font-serif italic font-bold text-sm text-[#071a3a] drop-shadow-xs">
+                              [Participant Name]
+                            </div>
+                            <div className="text-[9px] font-semibold text-slate-800">
+                              [Designation]
+                            </div>
+                            <div className="text-[8px] font-bold font-mono text-slate-700">
+                              PF No: 50400123456
+                            </div>
+                            <div className="pt-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#071a3a] text-amber-300 text-[8px] font-bold rounded-full border border-amber-400">
+                                Marks: 100 · Rank: #1
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-[7px] text-slate-500 font-mono">
+                            CLW-VAW-2026-00001 · Dynamic Program Overlay
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                        <ImageIcon className="w-8 h-8 text-slate-400 mb-2" />
+                        <div className="text-xs font-bold text-slate-800">
+                          Default Built-in Certificate Active
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Upload a custom certificate background (e.g. WhatsApp Image 2026-10-14 at 18.32.24.jpeg) to overlay Participant Name, Designation, PF No, Marks, and Rank.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Controls */}
+                  <div className="flex-1 space-y-3">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Upload the official certificate template background image. As per Vigilance guidelines, <strong>Participant Name</strong>, <strong>Designation</strong>, <strong>PF No</strong>, <strong>Marks</strong>, and <strong>Rank</strong> will be dynamically generated and imprinted on the certificate.
+                    </p>
+
+                    <input
+                      type="file"
+                      ref={templateFileInputRef}
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleTemplateFileChange}
+                      className="hidden"
+                    />
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => templateFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{settings.quiz_certificate_template ? 'Change Certificate Template' : 'Upload Certificate Template (Image)'}</span>
+                      </button>
+
+                      {settings.quiz_certificate_template && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveTemplate}
+                          className="px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
+                        >
+                          Remove Template (Use Default)
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Supports JPEG / PNG / WEBP landscape images (e.g. WhatsApp Image 2026-10-14 at 18.32.24.jpeg).
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Signature Photo Section */}
               <div className="p-5 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50/50">
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">

@@ -326,7 +326,7 @@ export const QuizView: React.FC<QuizViewProps> = ({
                     type="text"
                     value={participantName}
                     onChange={e => setParticipantName(e.target.value)}
-                    placeholder="e.g. S. K. Sharma"
+                    placeholder="e.g. C. P. CHAUHAN"
                     className="w-full px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-800 focus:outline-none"
                   />
                 </div>

@@ -23,7 +23,10 @@ import {
   RefreshCw,
   Flame,
   Medal,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  FastForward,
+  Play
 } from 'lucide-react';
 import { DEPARTMENTS } from '../data/departments';
 
@@ -82,6 +85,19 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
   const [remainingSeconds, setRemainingSeconds] = useState<number>(30);
   const questionStartTimeRef = useRef<number>(0);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-advance 5-second countdown state
+  const [autoCountdown, setAutoCountdown] = useState<number | null>(null);
+
+  // Host / Admin status check for on-screen controls
+  const [isAdminHost] = useState<boolean>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.has('host') || params.has('admin') || Boolean(localStorage.getItem('clw_admin_token'));
+    } catch {
+      return false;
+    }
+  });
 
   // Projector / Big Screen Mode
   const [isProjectorMode, setIsProjectorMode] = useState(false);
@@ -159,11 +175,24 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
         if (msg.state) setLiveState(msg.state);
         break;
       case 'lobby_started':
-      case 'question_started':
-      case 'answer_revealed':
       case 'quiz_ended':
       case 'session_reset':
+      case 'question_count_updated':
+        setAutoCountdown(null);
         fetchState(false);
+        break;
+      case 'question_started':
+        setAutoCountdown(null);
+        fetchState(false);
+        break;
+      case 'answer_revealed':
+        fetchState(false);
+        if (msg.autoAdvance !== false) {
+          setAutoCountdown(5);
+        }
+        break;
+      case 'auto_countdown':
+        setAutoCountdown(msg.seconds || 5);
         break;
       case 'leaderboard_update':
         if (msg.leaderboard) {
@@ -177,6 +206,21 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
         break;
     }
   };
+
+  // 1-second interval ticker for auto-advance countdown
+  useEffect(() => {
+    if (autoCountdown === null || autoCountdown <= 0) return;
+    const ticker = setInterval(() => {
+      setAutoCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(ticker);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [autoCountdown]);
 
   const fetchState = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -223,6 +267,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
 
         if (remaining <= 0) {
           if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+          fetchState(false);
         }
       };
 
@@ -301,9 +346,9 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
     }
   };
 
-  // Submit Answer to Active Question
+  // Submit or Change Answer to Active Question within Time Limit
   const handleOptionSelect = async (optIndex: number) => {
-    if (isAnswerSubmitted || !participant || liveState?.status !== 'question') return;
+    if (!participant || liveState?.status !== 'question' || remainingSeconds <= 0) return;
 
     soundEffects.playClick();
     setSelectedOption(optIndex);
@@ -319,7 +364,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
       if (res.ok) {
         setLastSubmissionResult(res);
         if (res.isCorrect) {
-          soundEffects.playFanfare();
+          soundEffects.playCorrect();
         }
       }
     } catch (err) {
@@ -410,6 +455,94 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
           )}
         </div>
       </header>
+
+      {/* Admin / Host Controller Bar (Visible for Admin / Host) */}
+      {isAdminHost && (
+        <div className="no-print max-w-6xl w-full mx-auto my-3 p-3.5 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 border border-indigo-500/50 rounded-2xl shadow-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+            <span className="font-bold text-white uppercase tracking-wider">Admin Live Host Bar:</span>
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-bold font-mono text-[10px] uppercase">
+              {liveState?.status || 'IDLE'}
+            </span>
+            <span className="text-slate-300 font-mono text-[11px] hidden sm:inline">
+              Room: {liveState?.sessionCode || 'CLW 2026'} · Q{((liveState?.currentIndex || 0) + 1)} of {liveState?.questionCount}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Reveal Answer Button */}
+            {(liveState?.status === 'question' || liveState?.status === 'time_lapsed' || liveState?.status === 'review') && (
+              <button
+                type="button"
+                onClick={async () => {
+                  soundEffects.playClick();
+                  await api.adminRevealLiveAnswer();
+                  fetchState(false);
+                }}
+                className={`px-3 py-1.5 font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                  liveState?.status === 'review'
+                    ? 'bg-amber-100 text-amber-950 hover:bg-amber-200'
+                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md'
+                }`}
+                title="Reveal correct answer to all participants"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>{liveState?.status === 'review' ? '✓ Answer Revealed' : 'Reveal Answer & Scores'}</span>
+              </button>
+            )}
+
+            {/* Next Question Button */}
+            {(liveState?.status === 'review' || liveState?.status === 'question' || liveState?.status === 'time_lapsed') && (
+              <button
+                type="button"
+                onClick={async () => {
+                  soundEffects.playClick();
+                  await api.adminNextLiveQuestion();
+                  fetchState(false);
+                }}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shadow-md flex items-center gap-1.5 cursor-pointer"
+                title="Advance immediately to next question without waiting"
+              >
+                <FastForward className="w-3.5 h-3.5 text-amber-300" />
+                <span>Next Question [Advance Now]</span>
+              </button>
+            )}
+
+            {/* Launch Question 1 from lobby */}
+            {liveState?.status === 'lobby' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  soundEffects.playClick();
+                  await api.adminStartLiveQuestion(0);
+                  fetchState(false);
+                }}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow-md flex items-center gap-1.5 cursor-pointer animate-pulse"
+              >
+                <Play className="w-3.5 h-3.5 text-amber-300" />
+                <span>Launch Question 1</span>
+              </button>
+            )}
+
+            {/* End Quiz */}
+            {liveState && liveState.status !== 'idle' && liveState.status !== 'ended' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm('End Live Quiz and publish podium?')) return;
+                  soundEffects.playFanfare();
+                  await api.adminEndLiveQuiz();
+                  fetchState(false);
+                }}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-semibold cursor-pointer"
+              >
+                End Quiz
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="max-w-6xl w-full mx-auto flex-1 flex flex-col py-6">
@@ -609,8 +742,11 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="pt-4 text-xs text-slate-500 italic">
-                    Scoring Tip: Faster correct submissions earn up to 500 bonus points per question!
+                  <div className="pt-4 text-xs text-amber-200/90 font-medium bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left">
+                    <span className="font-bold text-amber-300 block mb-1">⚡ Official Scoring & Rules:</span>
+                    • <strong>Correct answer:</strong> 100 points + up to 30 Speed Bonus (30 if within 1s, 29 in 2s, 30 − time taken).<br />
+                    • <strong>Negative answer:</strong> −50 points.<br />
+                    • <strong>Option change:</strong> You can change your choice anytime before timer expires! The last option selected and that time is considered.
                   </div>
                 </div>
               </div>
@@ -663,7 +799,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                   </h2>
                 </div>
 
-                {/* 4 Interactive Option Cards */}
+                {/* 4 Interactive Option Cards - Changeable within time limit */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {liveState.activeQuestion.options.map((optText, optIdx) => {
                     const isSelected = selectedOption === optIdx;
@@ -673,16 +809,16 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                       <button
                         key={optIdx}
                         onClick={() => handleOptionSelect(optIdx)}
-                        disabled={isAnswerSubmitted || remainingSeconds <= 0}
-                        className={`p-4 sm:p-5 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer relative overflow-hidden ${
+                        disabled={remainingSeconds <= 0}
+                        className={`p-4 sm:p-5 rounded-xl border text-left flex items-start gap-3.5 transition-all relative overflow-hidden ${
                           isSelected
-                            ? 'bg-amber-500/20 border-amber-400 text-white shadow-lg ring-2 ring-amber-400'
+                            ? 'bg-amber-500/25 border-amber-400 text-white shadow-lg ring-2 ring-amber-400 scale-[1.01]'
                             : 'bg-slate-900 hover:bg-slate-800/80 border-slate-800 text-slate-200 hover:border-slate-700'
-                        } ${isAnswerSubmitted ? 'cursor-default opacity-85' : 'active:scale-98'}`}
+                        } ${remainingSeconds <= 0 ? 'cursor-default opacity-80' : 'cursor-pointer active:scale-98'}`}
                       >
                         <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 border ${
                           isSelected
-                            ? 'bg-amber-400 text-slate-950 border-amber-300'
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm'
                             : 'bg-slate-800 text-slate-300 border-slate-700'
                         }`}>
                           {optionLetter}
@@ -700,13 +836,22 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                   })}
                 </div>
 
-                {/* Answer status alert */}
-                {isAnswerSubmitted && (
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-center flex items-center justify-center gap-2 text-xs sm:text-sm text-slate-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>
-                      Answer registered in <strong className="text-amber-400 font-mono">{timeTaken}s</strong>. Waiting for question timer to conclude...
-                    </span>
+                {/* Answer status alert with change notice */}
+                {isAnswerSubmitted && selectedOption !== null && (
+                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-center flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>
+                        Choice <strong className="text-white">Option {['A', 'B', 'C', 'D'][selectedOption]}</strong> recorded at <strong className="text-amber-400 font-mono">{timeTaken}s</strong>.
+                      </span>
+                    </div>
+                    {remainingSeconds > 0 ? (
+                      <span className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-full font-semibold">
+                        ⚡ You can click another option to change before time expires!
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">Timer complete · Choice locked</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -762,9 +907,16 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                     })}
                   </div>
 
-                  <p className="text-xs text-slate-400 italic mt-3">
-                    Next question will be launched shortly by the Admin...
-                  </p>
+                  {autoCountdown !== null && autoCountdown > 0 ? (
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs sm:text-sm font-bold font-mono mt-3 animate-pulse">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                      <span>Next question starting in {autoCountdown}s (or waiting for Admin)...</span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic mt-3">
+                      Next question will be launched shortly by the Admin...
+                    </p>
+                  )}
                 </div>
               </div>
             )}

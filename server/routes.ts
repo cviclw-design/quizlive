@@ -277,6 +277,19 @@ apiRouter.get('/certificate', (req, res) => {
   const settings = db.getSettings();
   const certId = `CLW-VAW-2026-${String(attempt.id).padStart(5, '0')}`;
 
+  // Determine Participant Rank
+  let rank: number = 1;
+  const liveEntry = liveQuiz.getLeaderboard().find(e => e.pf.toUpperCase() === cleanPf);
+  if (liveEntry && liveEntry.rank) {
+    rank = liveEntry.rank;
+  } else if (attempt.rank) {
+    rank = attempt.rank;
+  } else {
+    const all = db.getAllResults().filter(r => r.attempt?.status === 'submitted');
+    const idx = all.findIndex(r => r.participant.id === participant.id);
+    rank = idx >= 0 ? idx + 1 : 1;
+  }
+
   res.json({
     ok: true,
     certificate: {
@@ -288,6 +301,7 @@ apiRouter.get('/certificate', (req, res) => {
       unit: participant.unit_name,
       score: attempt.score,
       max: attempt.max_score,
+      rank,
       duration_seconds: attempt.duration_seconds || 0,
       submitted_at: attempt.submitted_at,
       cvo_name: settings.cvo_name,
@@ -808,6 +822,16 @@ apiRouter.post('/live/admin/set_timer', requireAdmin, (req, res) => {
   res.json({ ok: true, timerSeconds: updated });
 });
 
+apiRouter.post('/live/admin/set_question_count', requireAdmin, (req, res) => {
+  const { questionCount } = req.body || {};
+  if (!questionCount) {
+    res.status(422).json({ ok: false, error: 'Please provide questionCount' });
+    return;
+  }
+  const updated = liveQuiz.setQuestionCount(Number(questionCount));
+  res.json({ ok: true, questionCount: updated });
+});
+
 apiRouter.post('/live/admin/start_question', requireAdmin, (req, res) => {
   const { questionIndex } = req.body || {};
   const state = liveQuiz.startQuestion(questionIndex !== undefined ? Number(questionIndex) : undefined);
@@ -832,6 +856,12 @@ apiRouter.post('/live/admin/end_quiz', requireAdmin, (_req, res) => {
 apiRouter.post('/live/admin/reset', requireAdmin, (_req, res) => {
   const state = liveQuiz.resetSession();
   res.json(state);
+});
+
+apiRouter.post('/live/admin/toggle_auto_advance', requireAdmin, (req, res) => {
+  const { enabled } = req.body || {};
+  const current = liveQuiz.setAutoAdvance(Boolean(enabled));
+  res.json({ ok: true, autoAdvance: current });
 });
 
 apiRouter.get('/live/admin/state', requireAdmin, (_req, res) => {

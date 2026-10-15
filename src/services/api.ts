@@ -64,6 +64,7 @@ export interface CertificateData {
   unit: string;
   score: number;
   max: number;
+  rank?: number;
   duration_seconds?: number;
   submitted_at: string;
   cvo_name: string;
@@ -148,6 +149,7 @@ export interface LiveQuizPublicState {
   questionStartTime: number;
   questionEndTime: number;
   participantCount: number;
+  autoAdvance?: boolean;
   activeQuestion: {
     id: number;
     index: number;
@@ -165,6 +167,7 @@ export interface LiveQuizPublicState {
     optionCounts: [number, number, number, number];
   } | null;
   leaderboard: LiveLeaderboardEntry[];
+  reviewStartTime?: number;
   sloganHindi: string;
   sloganEnglish: string;
 }
@@ -481,6 +484,13 @@ class ApiService {
     });
   }
 
+  public async adminSetLiveQuestionCount(questionCount: number) {
+    return this.request<{ ok: boolean; questionCount: number }>('/live/admin/set_question_count', {
+      method: 'POST',
+      body: JSON.stringify({ questionCount })
+    });
+  }
+
   public async adminStartLiveQuestion(questionIndex?: number) {
     return this.request<LiveQuizPublicState>('/live/admin/start_question', {
       method: 'POST',
@@ -509,6 +519,13 @@ class ApiService {
   public async adminResetLiveQuiz() {
     return this.request<LiveQuizPublicState>('/live/admin/reset', {
       method: 'POST'
+    });
+  }
+
+  public async adminToggleLiveAutoAdvance(enabled: boolean) {
+    return this.request<{ ok: boolean; autoAdvance: boolean }>('/live/admin/toggle_auto_advance', {
+      method: 'POST',
+      body: JSON.stringify({ enabled })
     });
   }
 

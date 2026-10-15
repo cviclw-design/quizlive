@@ -55,46 +55,43 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
       const H = canvas.height; // 1414
       ctx.clearRect(0, 0, W, H);
 
-      // If Admin uploaded a Certificate Template, draw it as the background and overlay dynamic program fields
-      if (cert.quiz_certificate_template) {
+      // If Admin uploaded a Certificate Template (or default official template)
+      const templateSrc = cert.quiz_certificate_template || '/template_cert.jpg';
+      if (templateSrc) {
         const tplImg = new Image();
         tplImg.crossOrigin = 'anonymous';
         tplImg.onload = () => {
+          // Precise 1536 x 1024 resolution matching template aspect ratio (1.5 / 3:2)
+          const W = 1536;
+          const H = 1024;
+          canvas.width = W;
+          canvas.height = H;
           ctx.drawImage(tplImg, 0, 0, W, H);
 
-          // Name, Designation, PF No, Marks Obtained mentioned on certificate only through program
+          // Single line: Participant Name and Designation only
+          const singleLineText = cert.designation
+            ? `${cert.name}, ${cert.designation}`
+            : cert.name;
+
+          // Dynamically adjust font size to guarantee a perfect single line
+          let fontSize = 28;
+          ctx.font = `bold ${fontSize}px Georgia, "Playfair Display", serif`;
+          while (ctx.measureText(singleLineText).width > 820 && fontSize > 16) {
+            fontSize -= 1;
+            ctx.font = `bold ${fontSize}px Georgia, "Playfair Display", serif`;
+          }
+
+          // Render above the dotted line (dotted line is at row y = 612, blank area is y = 556-608)
           ctx.fillStyle = '#071a3a';
-          ctx.font = 'bold italic 72px Georgia, serif';
           ctx.textAlign = 'center';
-          ctx.fillText(cert.name, W / 2, 690);
-
-          ctx.fillStyle = '#1e293b';
-          ctx.font = '600 32px Outfit, sans-serif';
-          ctx.fillText(cert.designation, W / 2, 755);
-
-          ctx.fillStyle = '#334155';
-          ctx.font = '700 28px "JetBrains Mono", monospace, sans-serif';
-          ctx.fillText(`PF No: ${cert.pf}`, W / 2, 815);
-
-          ctx.fillStyle = '#0f172a';
-          ctx.font = '800 34px Outfit, sans-serif';
-          ctx.fillText(`Marks Obtained: ${cert.score} / ${cert.max}`, W / 2, 885);
-
-          ctx.fillStyle = '#64748b';
-          ctx.font = '500 20px Outfit, sans-serif';
-          const dateStr = new Date(cert.submitted_at || Date.now()).toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-          });
-          ctx.fillText(`Certificate No: ${cert.certificate_no}   ·   Date: ${dateStr}`, W / 2, 1340);
+          ctx.fillText(singleLineText, W / 2, 598);
 
           resolve(canvas);
         };
         tplImg.onerror = () => {
           paintStandard();
         };
-        tplImg.src = cert.quiz_certificate_template;
+        tplImg.src = templateSrc;
         return;
       }
 
@@ -210,15 +207,16 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
 
         // Score Box
         ctx.beginPath();
-        roundRect(ctx, 360, 940, 1280, 115, 20);
+        roundRect(ctx, 320, 940, 1360, 115, 20);
         ctx.fillStyle = '#071a3a';
         ctx.fill();
 
         ctx.fillStyle = '#ffffff';
         ctx.font = '700 24px Outfit, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`Score:  ${cert.score} / ${cert.max}`, 400, 1005);
-        ctx.fillText(`Participation ID:  ${cert.certificate_no}`, 760, 1005);
+        ctx.fillText(`Marks:  ${cert.score}`, 360, 1005);
+        ctx.fillText(`Rank:  #${cert.rank || 1}`, 620, 1005);
+        ctx.fillText(`Participation ID:  ${cert.certificate_no}`, 840, 1005);
         ctx.fillText(`Date:  ${new Date(cert.submitted_at || Date.now()).toLocaleDateString('en-IN')}`, 1340, 1005);
 
         // Official Stamp Seal on left
@@ -499,51 +497,20 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
       )}
 
       {/* HTML / Printable Certificate Frame */}
-      {cert.quiz_certificate_template ? (
-        <article className="certificate-print-area relative bg-white border-4 border-[#071a3a] rounded-2xl shadow-xl overflow-hidden w-full aspect-[1.414/1] flex flex-col justify-between">
-          {/* Admin Uploaded Certificate Template Background */}
+      {cert.quiz_certificate_template || true ? (
+        <article className="certificate-print-area relative bg-white border-2 border-slate-300 rounded-2xl shadow-2xl overflow-hidden w-full aspect-[1.5/1]">
+          {/* Certificate Template Background */}
           <img
-            src={cert.quiz_certificate_template}
-            alt="Certificate Template"
-            className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none z-0"
+            src={cert.quiz_certificate_template || '/template_cert.jpg'}
+            alt="Participation Certificate"
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-0"
           />
 
-          {/* Program-Generated Fields Only: Name, Designation, PF No, Marks Obtained */}
-          <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 sm:p-10 md:p-14 text-center pointer-events-none">
-            {/* Top spacing allowing template branding/header to display */}
-            <div className="h-[36%]" />
-
-            {/* Program Content Center: Name, Designation, PF No, Marks Obtained */}
-            <div className="space-y-1.5 sm:space-y-3">
-              {/* Recipient Name */}
-              <div className="text-2xl sm:text-4xl md:text-5xl font-serif italic font-bold text-[#071a3a] drop-shadow-xs tracking-wide">
-                {cert.name}
-              </div>
-
-              {/* Designation */}
-              <div className="text-xs sm:text-base md:text-xl font-semibold text-slate-800">
-                {cert.designation}
-              </div>
-
-              {/* PF No */}
-              <div className="text-[11px] sm:text-sm md:text-base font-bold font-mono text-slate-700">
-                PF No: <span className="text-[#071a3a] font-extrabold">{cert.pf}</span>
-              </div>
-
-              {/* Marks Obtained */}
-              <div className="pt-1 sm:pt-2">
-                <span className="inline-flex items-center gap-2 px-4 py-1.5 sm:px-6 sm:py-2.5 bg-[#071a3a] text-amber-300 font-bold text-xs sm:text-base rounded-full border-2 border-[#d4a017] shadow-md">
-                  <span>Marks Obtained:</span>
-                  <span className="font-mono text-white text-sm sm:text-lg">{cert.score} / {cert.max}</span>
-                </span>
-              </div>
-            </div>
-
-            {/* Bottom Sub-footer */}
-            <div className="flex items-center justify-between text-[9px] sm:text-xs text-slate-500 font-semibold px-2 sm:px-4">
-              <span>Cert No: {cert.certificate_no}</span>
-              <span>Issued: {formattedDate}</span>
-            </div>
+          {/* Participant Name and Designation ONLY - in a SINGLE line, directly ABOVE the dotted line */}
+          <div className="absolute top-[55.2%] left-0 right-0 z-10 flex items-center justify-center text-center px-6 sm:px-12 pointer-events-none">
+            <span className="font-serif font-bold text-[#071a3a] text-xs sm:text-base md:text-xl lg:text-2xl drop-shadow-xs tracking-wide truncate max-w-[85%]">
+              {cert.name}{cert.designation ? `, ${cert.designation}` : ''}
+            </span>
           </div>
         </article>
       ) : (
@@ -626,11 +593,18 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
             </p>
 
             {/* Score & Participation Bar */}
-            <div className="max-w-xl mx-auto bg-[#071a3a] text-white rounded-xl p-3 sm:p-4 flex items-center justify-between gap-4 mb-8 shadow-sm">
+            <div className="max-w-2xl mx-auto bg-[#071a3a] text-white rounded-xl p-3 sm:p-4 flex items-center justify-between gap-4 mb-8 shadow-sm">
               <div className="text-left">
                 <span className="text-[10px] text-amber-200 block uppercase font-medium">Marks Obtained</span>
                 <span className="text-xl sm:text-2xl font-bold font-mono">
-                  {cert.score} / {cert.max}
+                  {cert.score}
+                </span>
+              </div>
+
+              <div className="text-center">
+                <span className="text-[10px] text-amber-200 block uppercase font-medium">Rank</span>
+                <span className="text-xl sm:text-2xl font-bold font-mono text-amber-300">
+                  #{cert.rank || 1}
                 </span>
               </div>
 
@@ -663,7 +637,7 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
                 <div className="h-16 flex items-center justify-center sm:justify-end mb-1">
                   {cert.signature_photo ? (
                     <img
-                      src={cert.signature_photo}
+                      src={cert.signature_photo || undefined}
                       alt="SDGM & CVO Signature"
                       className="max-h-16 max-w-[200px] object-contain pointer-events-none"
                     />

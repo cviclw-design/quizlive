@@ -46,7 +46,7 @@ export type LiveQuizStatus = 'idle' | 'lobby' | 'question' | 'time_lapsed' | 're
 
 class LiveQuizManager {
   private status: LiveQuizStatus = 'idle';
-  private sessionCode: string = 'CLW2026';
+  private sessionCode: string = 'CLW 2026';
   private timerSeconds: number = 30; // Configurable by Admin per question (e.g. 15, 20, 30, 45, 60)
   private questionCount: number = 10;
   private questions: QuestionItem[] = [];
@@ -56,6 +56,9 @@ class LiveQuizManager {
   private participants: Map<string, LiveParticipant> = new Map();
   private wsClients: Set<WebSocket> = new Set();
   private autoReviewTimeout: NodeJS.Timeout | null = null;
+  private autoNextTimeout: NodeJS.Timeout | null = null;
+  private autoAdvance: boolean = true; // Automatically reveal answer on time expiry and advance after 5 seconds
+  private reviewStartTime: number = 0;
 
   public initWebSocket(server: Server) {
     const wss = new WebSocketServer({ server, path: '/ws' });
@@ -217,34 +220,52 @@ class LiveQuizManager {
       return { ok: false, error: 'No active question.' };
     }
 
-    // Guard against multiple submissions for the same question
-    if (participant.answers[this.currentIndex] !== undefined) {
-      return { ok: false, error: 'Answer already submitted for this question.' };
-    }
-
     const now = Date.now();
     const serverTimeTakenSeconds = Math.max(0.1, (now - this.questionStartTime) / 1000);
+
+    // Enforce time limit: Participant can submit or change option only within the question timer
+    if (serverTimeTakenSeconds > this.timerSeconds + 1.5) {
+      return { ok: false, error: 'Time limit has expired for this question.' };
+    }
+
     const timeTaken = clientTimeTaken !== undefined && clientTimeTaken > 0 && clientTimeTaken <= this.timerSeconds + 2
       ? Number(clientTimeTaken.toFixed(2))
       : Number(Math.min(this.timerSeconds, serverTimeTakenSeconds).toFixed(2));
 
     const isCorrect = selectedOption === currentQ.correct_index;
 
-    // SCORING FORMULA:
-    // Marks are provided on both accuracy and response timing:
-    // Base marks for correct answer = 1000 points
-    // Speed Bonus = up to 500 points scaled linearly by time remaining within the question timer
-    // E.g., at 0s elapsed: 1000 + 500 = 1500 points
-    // E.g., at 50% timer elapsed: 1000 + 250 = 1250 points
-    // E.g., at last second: 1000 points
-    // Wrong answer / timeout: 0 points
+    // Within time limit participant can change the option!
+    // If option changed, revert previous answer's points, marks, and timeTaken.
+    const previousAnswer = participant.answers[this.currentIndex];
+    if (previousAnswer) {
+      participant.score -= previousAnswer.points;
+      if (previousAnswer.isCorrect) {
+        participant.marks = Math.max(0, participant.marks - 1);
+        participant.correctCount = Math.max(0, participant.correctCount - 1);
+      }
+      participant.totalTimeTaken = Math.max(0, Number((participant.totalTimeTaken - previousAnswer.timeTaken).toFixed(2)));
+    }
+
+    // SCORING RULES SPECIFIED BY USER:
+    // 1. Correct Answer: Base 100 points
+    // 2. Speed Bonus: 30 for answer within 1 second, 29 if answered in 2 seconds (30 minus time taken)
+    //    Formula: Math.max(0, 31 - Math.max(1, Math.ceil(timeTaken)))
+    //    E.g.: <= 1s -> 30 bonus -> 130 total
+    //    E.g.: 2s -> 29 bonus -> 129 total
+    //    E.g.: 30s -> 1 bonus -> 101 total
+    //    E.g.: > 30s -> 0 bonus -> 100 total
+    // 3. Negative Answer: MINUS 50 points (-50)
+    // 4. If option changed within time limit, last option selected and that time is considered for points.
     let points = 0;
     if (isCorrect) {
-      const remainingRatio = Math.max(0, (this.timerSeconds - timeTaken) / this.timerSeconds);
-      const speedBonus = Math.round(500 * remainingRatio);
-      points = 1000 + speedBonus;
+      const elapsedSeconds = Math.max(1, Math.ceil(timeTaken));
+      const speedBonus = Math.max(0, 31 - elapsedSeconds);
+      points = 100 + speedBonus;
       participant.marks += 1;
       participant.correctCount += 1;
+    } else {
+      // Negative answer: -50 points
+      points = -50;
     }
 
     participant.score += points;
@@ -340,17 +361,15 @@ class LiveQuizManager {
     this.questionStartTime = Date.now();
     this.questionEndTime = this.questionStartTime + (this.timerSeconds * 1000);
 
-    // When question timer elapses: stop receiving answers, mark time_lapsed
-    // Do NOT auto-reveal answer; wait for admin to click "Reveal Answer"
+    // When question timer elapses:
+    // Automatically show the right answer and scores, wait 5 seconds and advance to next question
     this.autoReviewTimeout = setTimeout(() => {
-      if (this.status === 'question') {
-        this.status = 'time_lapsed';
-        this.broadcast({
-          type: 'time_lapsed',
-          index: this.currentIndex,
-          state: this.getPublicState(),
-          message: 'Time has lapsed! Submissions closed. Waiting for Admin to reveal answer.'
-        });
+      if (this.status === 'question' || this.status === 'time_lapsed') {
+        this.revealAnswer();
+
+        if (this.autoAdvance) {
+          this.triggerAutoNextCountdown(5);
+        }
       }
     }, this.timerSeconds * 1000);
 
@@ -377,6 +396,21 @@ class LiveQuizManager {
     return this.getPublicState();
   }
 
+  public setQuestionCount(count: number) {
+    this.questionCount = Math.max(3, Math.min(100, Number(count) || 10));
+    if (this.status === 'idle' || this.status === 'lobby') {
+      const all = db.getAllQuestions('All');
+      const shuffled = [...all].sort(() => Math.random() - 0.5);
+      this.questions = shuffled.slice(0, this.questionCount);
+    }
+    this.broadcast({
+      type: 'question_count_updated',
+      questionCount: this.questionCount,
+      state: this.getPublicState()
+    });
+    return this.questionCount;
+  }
+
   public revealAnswer() {
     if (this.autoReviewTimeout) {
       clearTimeout(this.autoReviewTimeout);
@@ -384,6 +418,7 @@ class LiveQuizManager {
     }
 
     this.status = 'review';
+    this.reviewStartTime = Date.now();
     const currentQ = this.questions[this.currentIndex];
     if (!currentQ) return this.getPublicState();
 
@@ -401,13 +436,61 @@ class LiveQuizManager {
       index: this.currentIndex,
       correctIndex: currentQ.correct_index,
       optionCounts: counts,
-      leaderboard: this.getLeaderboard()
+      leaderboard: this.getLeaderboard(),
+      autoAdvance: this.autoAdvance,
+      reviewStartTime: this.reviewStartTime
     });
+
+    // When answer is revealed, if autoAdvance is enabled, start 5s countdown
+    if (this.autoAdvance) {
+      this.triggerAutoNextCountdown(5);
+    }
 
     return this.getPublicState();
   }
 
+  public triggerAutoNextCountdown(seconds: number = 5) {
+    if (this.autoNextTimeout) {
+      clearTimeout(this.autoNextTimeout);
+      this.autoNextTimeout = null;
+    }
+
+    this.broadcast({
+      type: 'auto_countdown',
+      seconds,
+      message: `Answer revealed! Question ${this.currentIndex + 2} starts in ${seconds}s (or Admin can click Next Question)...`
+    });
+
+    this.autoNextTimeout = setTimeout(() => {
+      if (this.status === 'review') {
+        this.nextQuestion();
+      }
+    }, seconds * 1000);
+  }
+
+  public setAutoAdvance(enabled: boolean) {
+    this.autoAdvance = Boolean(enabled);
+    if (!this.autoAdvance && this.autoNextTimeout) {
+      clearTimeout(this.autoNextTimeout);
+      this.autoNextTimeout = null;
+    }
+    this.broadcast({
+      type: 'auto_advance_updated',
+      autoAdvance: this.autoAdvance
+    });
+    return this.autoAdvance;
+  }
+
   public nextQuestion() {
+    if (this.autoReviewTimeout) {
+      clearTimeout(this.autoReviewTimeout);
+      this.autoReviewTimeout = null;
+    }
+    if (this.autoNextTimeout) {
+      clearTimeout(this.autoNextTimeout);
+      this.autoNextTimeout = null;
+    }
+
     this.currentIndex += 1;
     if (this.currentIndex >= this.questions.length) {
       return this.endQuiz();
@@ -419,6 +502,10 @@ class LiveQuizManager {
     if (this.autoReviewTimeout) {
       clearTimeout(this.autoReviewTimeout);
       this.autoReviewTimeout = null;
+    }
+    if (this.autoNextTimeout) {
+      clearTimeout(this.autoNextTimeout);
+      this.autoNextTimeout = null;
     }
 
     this.status = 'ended';
@@ -452,6 +539,10 @@ class LiveQuizManager {
               }
             }
             db.finalizeAttempt(attempt.id);
+            // Persist exact live score, rank, and duration on attempt
+            attempt.score = p.score;
+            attempt.rank = p.rank;
+            attempt.duration_seconds = Math.round(p.totalTimeTaken);
           }
         }
       } catch (e) {
@@ -491,20 +582,19 @@ class LiveQuizManager {
     const list = Array.from(this.participants.values());
 
     // Sort by:
-    // 1. Marks obtained DESC (primary score)
-    // 2. Tie-breaker: Seniority decided by timing to solve question (less time taken = senior / higher rank)
-    // 3. Score (speed bonus points) DESC
+    // 1. Total score DESC (100 base + speed bonus up to 30, minus 50 for negative answer)
+    // 2. Marks obtained DESC (correct count)
+    // 3. Tie-breaker: Seniority decided by timing to solve question (less time taken = senior / higher rank)
     // 4. Earlier joinedAt ASC
     list.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
       if (b.marks !== a.marks) {
         return b.marks - a.marks;
       }
-      // If the same marks then seniority decide on the basis of timing to solve the question less time taken will be senior
       if (a.totalTimeTaken !== b.totalTimeTaken) {
         return a.totalTimeTaken - b.totalTimeTaken;
-      }
-      if (b.score !== a.score) {
-        return b.score - a.score;
       }
       return a.joinedAt - b.joinedAt;
     });
@@ -580,6 +670,8 @@ class LiveQuizManager {
       activeQuestion: sanitizedQuestion,
       reviewData,
       leaderboard: this.getLeaderboard(),
+      autoAdvance: this.autoAdvance,
+      reviewStartTime: this.reviewStartTime,
       sloganHindi: settings.slogan_hindi || 'सत्यनिष्ठा से समृद्धि',
       sloganEnglish: settings.slogan_english || 'Probity for Prosperity'
     };

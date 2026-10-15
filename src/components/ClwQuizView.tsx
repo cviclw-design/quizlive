@@ -246,8 +246,8 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
         </div>
 
         {/* Scoring note */}
-        <div className="mt-4 text-center text-[11px] text-slate-400">
-          Scoring Rule: +1.0 for Correct · −0.5 for Wrong or Blank/Timeout · 0 for "Not Answering".
+        <div className="mt-4 text-center text-[11px] text-slate-500">
+          Scoring Rule: +100 for Correct Answer · −50 for Negative / Wrong Answer · 0 for "Not Answering (Skip)". You can change your choice freely before clicking submit or timer expires.
         </div>
       </div>
     </div>

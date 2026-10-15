@@ -54,6 +54,7 @@ export interface AttemptItem {
   duration_seconds?: number;
   question_ids: number[];
   answers_json: Record<string, string>; // questionId -> "0"|"1"|"2"|"3"|"skip"
+  rank?: number;
 }
 
 export interface AuditLogItem {
@@ -111,8 +112,8 @@ export const DEPARTMENTS = [
   'Security (RPF)',
   'Signal & Telecom',
   'Engineering',
-  'Traffic - Commercial & Operating',
-  'Civil Engineering',
+  'Vigilance',
+  'Engineering',
   'Medical',
   'General Administration',
   'Rajbhasha'
@@ -121,19 +122,17 @@ export const DEPARTMENTS = [
 export const UNITS = [
   'CLW Headquarters',
   'Administrative Building',
-  'Loco Shop',
+  'Workshop',
   'Steel Foundry',
   'Traction Motor Shop',
-  '3-Phase Loco Shop',
-  'Central Stores Depot',
+  'Fabrication Shop',
+  'Stores Depot',
   'KG Hospital',
   'ELAAU Dankuni',
-  'CLW Chittaranjan',
-  'Hubballi Division',
-  'Bengaluru Division',
-  'Mysuru Division',
-  'Workshop Hubballi',
-  'Workshop Mysuru'
+  'Manufacturing',
+  'Works Office',
+  'Engineering'
+
 ];
 
 const INITIAL_QUESTIONS: Omit<QuestionItem, 'id' | 'sort_order' | 'created_at'>[] = [
@@ -372,8 +371,8 @@ class Database {
     const schedules: ScheduleItem[] = DEPARTMENTS.map((dept, idx) => ({
       id: idx + 1,
       department: dept,
-      starts_at: '2024-01-01 00:00:00',
-      ends_at: '2035-12-31 23:59:59',
+      starts_at: '2026-08-17 00:00:00',
+      ends_at: '2026-11-16 23:59:59',
       updated_at: now
     }));
 
@@ -414,7 +413,6 @@ class Database {
         quiz_seconds: 45,
         quiz_count: 20,
         enforce_schedule: false,
-        signature_photo: null,
         quiz_certificate_template: null,
         pledge_certificate_template: null,
         slogan_hindi: 'सत्यनिष्ठा से समृद्धि',
@@ -680,7 +678,7 @@ class Database {
       started_at: now,
       submitted_at: null,
       score: null,
-      max_score: questionIds.length,
+      max_score: questionIds.length * 100,
       question_ids: questionIds,
       answers_json: {}
     };
@@ -702,21 +700,21 @@ class Database {
     if (!attempt) return null;
 
     // Calculate score
-    // Rule: +1 for correct, -0.5 for wrong or blank, 0 for "skip"
+    // User Rule: +100 for correct answer, -50 for negative / incorrect answer, 0 for skip / unattempted
     let totalScore = 0;
     attempt.question_ids.forEach(qid => {
       const q = this.getQuestionById(qid);
       const sel = attempt.answers_json[String(qid)];
-      if (sel === 'skip') {
-        // 0 marks
-      } else if (sel !== undefined && q && String(q.correct_index) === String(sel)) {
-        totalScore += 1;
+      if (sel === 'skip' || sel === undefined || sel === '') {
+        // 0 marks for skipped or not answered
+      } else if (q && String(q.correct_index) === String(sel)) {
+        totalScore += 100;
       } else {
-        totalScore -= 0.5; // Wrong or blank
+        totalScore -= 50; // -50 points for negative answer
       }
     });
 
-    attempt.score = Math.round(totalScore * 10) / 10;
+    attempt.score = totalScore;
     attempt.status = 'submitted';
     attempt.submitted_at = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
