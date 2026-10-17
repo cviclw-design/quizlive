@@ -40,6 +40,7 @@ export interface ParticipantItem {
   department: string;
   unit_name: string;
   mobile: string;
+  password?: string; // Default '123'
   created_at: string;
 }
 
@@ -66,10 +67,33 @@ export interface AuditLogItem {
   ip: string;
 }
 
+export interface LiveSessionRecord {
+  id: string; // e.g. "LIVE-2026-01"
+  title: string;
+  scheduled_at: string; // e.g. "2026-10-29 11:00"
+  duration_minutes?: number;
+  timer_seconds: number;
+  question_count: number;
+  department?: string;
+  status: 'scheduled' | 'lobby' | 'in_progress' | 'completed';
+  created_at: string;
+  completed_at?: string;
+  participants_count?: number;
+  history?: {
+    ended_at: string;
+    leaderboard: any[];
+    participant_answers: Record<string, any>;
+  };
+}
+
 export interface SystemSettings {
   cvo_name: string;
   cvo_designation: string;
   cvo_organization: string;
+  organization_name: string;
+  programme_name: string;
+  programme_period: string;
+  registration_enabled: boolean;
   signature_photo: string | null; // Base64 data URL
   quiz_certificate_template?: string | null; // Base64 template uploaded by admin
   pledge_certificate_template?: string | null; // Base64 template uploaded by admin
@@ -91,6 +115,9 @@ export interface DatabaseSchema {
   participants: ParticipantItem[];
   attempts: AttemptItem[];
   audit_log: AuditLogItem[];
+  departments?: string[];
+  units?: string[];
+  live_sessions?: LiveSessionRecord[];
   seq: {
     admin: number;
     question: number;
@@ -111,7 +138,7 @@ export const DEPARTMENTS = [
   'Mechanical',
   'Security (RPF)',
   'Signal & Telecom',
-  'Engineering',
+  'Civil Engineering',
   'Vigilance',
   'Engineering',
   'Medical',
@@ -353,7 +380,32 @@ class Database {
     if (fs.existsSync(DB_FILE)) {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
-        return JSON.parse(raw);
+        const parsed: DatabaseSchema = JSON.parse(raw);
+        // Migrations & defaults
+        parsed.departments = Array.from(new Set((parsed.departments && parsed.departments.length > 0 ? parsed.departments : DEPARTMENTS).map(d => d.trim()).filter(Boolean)));
+        parsed.units = Array.from(new Set((parsed.units && parsed.units.length > 0 ? parsed.units : UNITS).map(u => u.trim()).filter(Boolean)));
+        if (!parsed.live_sessions) {
+          parsed.live_sessions = [];
+        }
+        if (!parsed.settings.organization_name) {
+          parsed.settings.organization_name = 'Chittaranjan Locomotive Works (CLW)';
+        }
+        if (!parsed.settings.programme_name) {
+          parsed.settings.programme_name = 'Vigilance Awareness Week 2026 Quiz Competition';
+        }
+        if (!parsed.settings.programme_period) {
+          parsed.settings.programme_period = '27th October to 2nd November 2026';
+        }
+        if (parsed.settings.registration_enabled === undefined) {
+          parsed.settings.registration_enabled = true;
+        }
+        // Ensure all participants have password default '123'
+        if (Array.isArray(parsed.participants)) {
+          parsed.participants.forEach(p => {
+            if (!p.password) p.password = '123';
+          });
+        }
+        return parsed;
       } catch (err) {
         console.error('Error reading DB_FILE, recreating initial state', err);
       }
@@ -407,6 +459,10 @@ class Database {
         cvo_name: 'Sugind Surendran',
         cvo_designation: 'SDGM & Chief Vigilance Officer',
         cvo_organization: 'Chittaranjan Locomotive Works, Chittaranjan',
+        organization_name: 'Chittaranjan Locomotive Works (CLW)',
+        programme_name: 'Vigilance Awareness Week 2026 Quiz Competition',
+        programme_period: '27th October to 2nd November 2026',
+        registration_enabled: true,
         signature_photo: null, // Will store uploaded signature photo base64
         seal_text: 'CLW\nVIGILANCE\nCHITTARANJAN',
         logo_url: 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png',
@@ -421,6 +477,9 @@ class Database {
       },
       questions,
       schedules,
+      departments: [...DEPARTMENTS],
+      units: [...UNITS],
+      live_sessions: [],
       participants: [],
       attempts: [],
       audit_log: [
@@ -618,9 +677,16 @@ class Database {
     department: string;
     unit_name: string;
     mobile: string;
+    password?: string;
   }): ParticipantItem {
     const existing = this.getParticipantByPf(data.pf_no);
-    if (existing) return existing;
+    if (existing) {
+      if (data.password && data.password.trim()) {
+        existing.password = data.password.trim();
+        this.persist();
+      }
+      return existing;
+    }
 
     this.data.seq.participant++;
     const item: ParticipantItem = {
@@ -631,6 +697,7 @@ class Database {
       department: data.department.trim(),
       unit_name: data.unit_name.trim(),
       mobile: data.mobile.trim(),
+      password: (data.password && data.password.trim()) || '123',
       created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
     };
     this.data.participants.push(item);
@@ -645,6 +712,7 @@ class Database {
     department: string;
     unit?: string;
     mobile?: string;
+    password?: string;
   }): ParticipantItem {
     return this.registerParticipant({
       pf_no: data.pf,
@@ -652,8 +720,362 @@ class Database {
       designation: data.designation,
       department: data.department,
       unit_name: data.unit || 'Chittaranjan Locomotive Works',
-      mobile: data.mobile || '9999999999'
+      mobile: data.mobile || '9999999999',
+      password: data.password || '123'
     });
+  }
+
+  // --- Participant Login & Password Reset ---
+  public verifyParticipantLogin(pf: string, password: string): { ok: boolean; participant?: ParticipantItem; error?: string } {
+    const cleanPf = pf.trim().toUpperCase();
+    const p = this.getParticipantByPf(cleanPf);
+    if (!p) {
+      return { ok: false, error: 'PF Number not registered. Please register first.' };
+    }
+    const currentPass = (p.password || '123').trim();
+    if (currentPass !== password.trim()) {
+      return { ok: false, error: 'Incorrect password. Default password is 123, or contact Admin.' };
+    }
+    return { ok: true, participant: p };
+  }
+
+  public resetParticipantPassword(participantId: number, newPassword: string = '123'): boolean {
+    const p = this.getParticipantById(participantId);
+    if (!p) return false;
+    p.password = (newPassword || '123').trim();
+    this.persist();
+    return true;
+  }
+
+  public changeParticipantPassword(pf: string, oldPassword: string, newPassword: string): { ok: boolean; error?: string } {
+    const cleanPf = pf.trim().toUpperCase();
+    const p = this.getParticipantByPf(cleanPf);
+    if (!p) return { ok: false, error: 'Participant not found.' };
+    if ((p.password || '123').trim() !== oldPassword.trim()) {
+      return { ok: false, error: 'Current password is incorrect.' };
+    }
+    p.password = newPassword.trim();
+    this.persist();
+    return { ok: true };
+  }
+
+  // --- Dynamic Departments & Units ---
+  public getDepartments(): string[] {
+    if (!this.data.departments || this.data.departments.length === 0) {
+      this.data.departments = [...DEPARTMENTS];
+    }
+    return this.data.departments;
+  }
+
+  public setDepartments(list: string[]): string[] {
+    const cleaned = Array.from(new Set(list.map(s => s.trim()).filter(Boolean)));
+    this.data.departments = cleaned;
+    this.persist();
+    return this.data.departments;
+  }
+
+  public addDepartment(name: string): string[] {
+    const clean = name.trim();
+    const depts = this.getDepartments();
+    if (clean && !depts.includes(clean)) {
+      depts.push(clean);
+      this.data.departments = depts;
+      this.persist();
+    }
+    return this.getDepartments();
+  }
+
+  public deleteDepartment(name: string): string[] {
+    this.data.departments = this.getDepartments().filter(d => d !== name.trim());
+    this.persist();
+    return this.getDepartments();
+  }
+
+  public updateDepartment(oldName: string, newName: string): string[] {
+    const o = oldName.trim();
+    const n = newName.trim();
+    if (!n) return this.getDepartments();
+    const depts = this.getDepartments();
+    const idx = depts.indexOf(o);
+    if (idx !== -1) {
+      depts[idx] = n;
+      this.data.departments = depts;
+      // Also update participants with this department
+      this.data.participants.forEach(p => {
+        if (p.department === o) p.department = n;
+      });
+      this.persist();
+    }
+    return this.getDepartments();
+  }
+
+  public getUnits(): string[] {
+    if (!this.data.units || this.data.units.length === 0) {
+      this.data.units = [...UNITS];
+    }
+    return this.data.units;
+  }
+
+  public setUnits(list: string[]): string[] {
+    const cleaned = Array.from(new Set(list.map(s => s.trim()).filter(Boolean)));
+    this.data.units = cleaned;
+    this.persist();
+    return this.getUnits();
+  }
+
+  public addUnit(name: string): string[] {
+    const clean = name.trim();
+    const units = this.getUnits();
+    if (clean && !units.includes(clean)) {
+      units.push(clean);
+      this.data.units = units;
+      this.persist();
+    }
+    return this.getUnits();
+  }
+
+  public deleteUnit(name: string): string[] {
+    this.data.units = this.getUnits().filter(u => u !== name.trim());
+    this.persist();
+    return this.getUnits();
+  }
+
+  public updateUnit(oldName: string, newName: string): string[] {
+    const o = oldName.trim();
+    const n = newName.trim();
+    if (!n) return this.getUnits();
+    const units = this.getUnits();
+    const idx = units.indexOf(o);
+    if (idx !== -1) {
+      units[idx] = n;
+      this.data.units = units;
+      // Also update participants with this unit
+      this.data.participants.forEach(p => {
+        if (p.unit_name === o) p.unit_name = n;
+      });
+      this.persist();
+    }
+    return this.getUnits();
+  }
+
+  // --- Detailed Attempt Question-by-Question Trace ---
+  public getAttemptDetails(attemptId: number) {
+    const attempt = this.getAttemptById(attemptId);
+    if (!attempt) return null;
+    const participant = this.getParticipantById(attempt.participant_id);
+    if (!participant) return null;
+
+    const questionsTrace = attempt.question_ids.map((qid, idx) => {
+      const q = this.getQuestionById(qid);
+      const sel = attempt.answers_json[String(qid)];
+      const selNum = (sel === 'skip' || sel === undefined || sel === '') ? -1 : Number(sel);
+      const isCorrect = q ? String(q.correct_index) === String(sel) : false;
+      const isSkipped = sel === 'skip' || sel === undefined || sel === '';
+      const points = isSkipped ? 0 : (isCorrect ? 100 : -50);
+
+      const options = q ? [q.option_a, q.option_b, q.option_c, q.option_d] : [];
+
+      return {
+        question_index: idx + 1,
+        question_id: qid,
+        question_text: q?.question || 'Question not found',
+        department: q?.department || 'All',
+        options,
+        selected_option_index: selNum,
+        selected_option_text: selNum >= 0 && options[selNum] ? options[selNum] : (isSkipped ? 'Skipped / Unattempted' : 'Invalid'),
+        correct_option_index: q?.correct_index ?? -1,
+        correct_option_text: q && options[q.correct_index] ? options[q.correct_index] : '',
+        is_correct: isCorrect,
+        is_skipped: isSkipped,
+        points_awarded: points
+      };
+    });
+
+    return {
+      attempt: {
+        id: attempt.id,
+        status: attempt.status,
+        started_at: attempt.started_at,
+        submitted_at: attempt.submitted_at,
+        score: attempt.score,
+        max_score: attempt.max_score,
+        duration_seconds: attempt.duration_seconds,
+        rank: attempt.rank
+      },
+      participant: {
+        id: participant.id,
+        pf_no: participant.pf_no,
+        name: participant.name,
+        designation: participant.designation,
+        department: participant.department,
+        unit_name: participant.unit_name,
+        mobile: participant.mobile
+      },
+      questions: questionsTrace
+    };
+  }
+
+  // --- Live Quiz Sessions & History ---
+  public getLiveSessions(): LiveSessionRecord[] {
+    if (!this.data.live_sessions) {
+      this.data.live_sessions = [];
+    }
+    return this.data.live_sessions;
+  }
+
+  public getLiveSessionById(id: string): LiveSessionRecord | undefined {
+    return this.getLiveSessions().find(s => s.id === id);
+  }
+
+  public createLiveSession(data: {
+    title: string;
+    scheduled_at: string;
+    timer_seconds: number;
+    question_count: number;
+    department?: string;
+  }): LiveSessionRecord {
+    if (!this.data.live_sessions) this.data.live_sessions = [];
+    const count = this.data.live_sessions.length + 1;
+    const session: LiveSessionRecord = {
+      id: `LIVE-SESSION-${String(count).padStart(3, '0')}`,
+      title: data.title.trim() || `Live Vigilance Quiz #${count}`,
+      scheduled_at: data.scheduled_at,
+      timer_seconds: Math.max(10, Math.min(180, Number(data.timer_seconds) || 30)),
+      question_count: Math.max(3, Math.min(50, Number(data.question_count) || 10)),
+      department: data.department || 'All',
+      status: 'scheduled',
+      created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
+    };
+    this.data.live_sessions.unshift(session);
+    this.persist();
+    return session;
+  }
+
+  public updateLiveSession(id: string, updates: Partial<LiveSessionRecord>): LiveSessionRecord | null {
+    const session = this.getLiveSessionById(id);
+    if (!session) return null;
+    Object.assign(session, updates);
+    this.persist();
+    return session;
+  }
+
+  public deleteLiveSession(id: string): boolean {
+    if (!this.data.live_sessions) return false;
+    const initialLen = this.data.live_sessions.length;
+    this.data.live_sessions = this.data.live_sessions.filter(s => s.id !== id);
+    if (this.data.live_sessions.length !== initialLen) {
+      this.persist();
+      return true;
+    }
+    return false;
+  }
+
+  // --- Admin Direct Database Table Access & Modification ---
+  public getTableData(tableName: string): any {
+    switch (tableName) {
+      case 'participants':
+        return this.data.participants.map(p => {
+          const attempt = this.getAttemptByParticipantId(p.id);
+          return {
+            ...p,
+            password: p.password || '123',
+            attempt_status: attempt?.status || 'not_started',
+            score: attempt?.score ?? null,
+            duration_seconds: attempt?.duration_seconds ?? null,
+            attempt_id: attempt?.id ?? null
+          };
+        });
+      case 'attempts':
+        return this.data.attempts.map(a => {
+          const p = this.getParticipantById(a.participant_id);
+          return {
+            ...a,
+            pf_no: p?.pf_no || 'UNKNOWN',
+            participant_name: p?.name || 'UNKNOWN',
+            department: p?.department || 'UNKNOWN',
+            unit_name: p?.unit_name || 'UNKNOWN'
+          };
+        });
+      case 'questions':
+        return this.data.questions;
+      case 'departments':
+        return this.getDepartments();
+      case 'units':
+        return this.getUnits();
+      case 'settings':
+        return this.getSettings();
+      case 'live_sessions':
+        return this.getLiveSessions();
+      case 'audit_log':
+        return this.data.audit_log.slice(0, 200);
+      default:
+        return null;
+    }
+  }
+
+  public updateTableRow(tableName: string, id: any, updates: any): boolean {
+    switch (tableName) {
+      case 'participants': {
+        const p = this.getParticipantById(Number(id));
+        if (!p) return false;
+        if (updates.pf_no) p.pf_no = String(updates.pf_no).trim().toUpperCase();
+        if (updates.name) p.name = String(updates.name).trim();
+        if (updates.designation) p.designation = String(updates.designation).trim();
+        if (updates.department) p.department = String(updates.department).trim();
+        if (updates.unit_name) p.unit_name = String(updates.unit_name).trim();
+        if (updates.mobile) p.mobile = String(updates.mobile).trim();
+        if (updates.password !== undefined) p.password = String(updates.password).trim() || '123';
+        this.persist();
+        return true;
+      }
+      case 'attempts': {
+        const a = this.getAttemptById(Number(id));
+        if (!a) return false;
+        if (updates.score !== undefined) a.score = Number(updates.score);
+        if (updates.status) a.status = updates.status;
+        if (updates.rank !== undefined) a.rank = Number(updates.rank);
+        this.persist();
+        return true;
+      }
+      case 'questions': {
+        return !!this.updateQuestion(Number(id), updates);
+      }
+      case 'settings': {
+        this.updateSettings(updates);
+        return true;
+      }
+      case 'live_sessions': {
+        return !!this.updateLiveSession(String(id), updates);
+      }
+      default:
+        return false;
+    }
+  }
+
+  public deleteTableRow(tableName: string, id: any): boolean {
+    switch (tableName) {
+      case 'participants': {
+        const numId = Number(id);
+        this.data.participants = this.data.participants.filter(p => p.id !== numId);
+        this.data.attempts = this.data.attempts.filter(a => a.participant_id !== numId);
+        this.persist();
+        return true;
+      }
+      case 'attempts': {
+        const numId = Number(id);
+        this.data.attempts = this.data.attempts.filter(a => a.id !== numId);
+        this.persist();
+        return true;
+      }
+      case 'questions': {
+        return this.deleteQuestion(Number(id));
+      }
+      case 'live_sessions': {
+        return this.deleteLiveSession(String(id));
+      }
+      default:
+        return false;
+    }
   }
 
   public startAttempt(participantId: number, questionIds: number[]): AttemptItem {

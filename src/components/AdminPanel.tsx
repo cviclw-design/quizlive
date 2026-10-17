@@ -44,7 +44,7 @@ interface AdminPanelProps {
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdated }) => {
   const [admin, setAdmin] = useState<{ id: number; username: string; display_name: string; must_change: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'live' | 'questions' | 'signature' | 'schedule' | 'results' | 'audit' | 'password'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'live' | 'questions' | 'signature' | 'dept_units' | 'dbtables' | 'schedule' | 'results' | 'audit' | 'password'>('dashboard');
   const [shareOpen, setShareOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
 
@@ -56,6 +56,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
   const [liveLoading, setLiveLoading] = useState<boolean>(false);
   const [liveActionMsg, setLiveActionMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [adminCountdown, setAdminCountdown] = useState<number | null>(null);
+
+  // Live Quiz Scheduling & Session History State
+  const [liveSessions, setLiveSessions] = useState<any[]>([]);
+  const [newSessionTitle, setNewSessionTitle] = useState('');
+  const [newSessionDate, setNewSessionDate] = useState('');
+  const [newSessionTimer, setNewSessionTimer] = useState(30);
+  const [newSessionQuestions, setNewSessionQuestions] = useState(10);
+  const [selectedSessionHistory, setSelectedSessionHistory] = useState<any | null>(null);
+
+  // Dynamic Departments & Units State
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
+  const [newDeptInput, setNewDeptInput] = useState('');
+  const [newUnitInput, setNewUnitInput] = useState('');
+  const [editingDeptItem, setEditingDeptItem] = useState<{ original: string; current: string } | null>(null);
+  const [editingUnitItem, setEditingUnitItem] = useState<{ original: string; current: string } | null>(null);
+
+  // Database Tables Explorer State
+  const [selectedDbTable, setSelectedDbTable] = useState<string>('participants');
+  const [dbTableData, setDbTableData] = useState<any[] | null>(null);
+  const [dbTableLoading, setDbTableLoading] = useState(false);
+  const [dbTableSearch, setDbTableSearch] = useState('');
+  const [editingDbRow, setEditingDbRow] = useState<any | null>(null);
+  const [editingDbJson, setEditingDbJson] = useState('');
+  const [dbTableMsg, setDbTableMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+  // Reset User Password State
+  const [resetUserModal, setResetUserModal] = useState<{ id: number; name: string; pf: string } | null>(null);
+  const [resetUserPass, setResetUserPass] = useState('123');
+  const [resetUserMsg, setResetUserMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+  // Attempt Trace Inspection State
+  const [inspectAttemptModal, setInspectAttemptModal] = useState<any | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
 
   // Login form state
   const [loginUser, setLoginUser] = useState('admin');
@@ -205,10 +239,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       loadDashboardData();
     } else if (tab === 'live') {
       loadLiveAdminState();
+      loadLiveSessions();
     } else if (tab === 'questions') {
       loadQuestions(selectedDeptFilter);
     } else if (tab === 'signature') {
       loadSettings();
+    } else if (tab === 'dept_units') {
+      loadDepartmentsAndUnits();
+    } else if (tab === 'dbtables') {
+      loadDbTable(selectedDbTable);
     } else if (tab === 'schedule') {
       loadSchedule();
     } else if (tab === 'results') {
@@ -218,7 +257,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
     }
   };
 
-  // --- Live Quiz Operations ---
+  // --- Live Quiz & Waiting Room Operations ---
   const loadLiveAdminState = async () => {
     try {
       const res = await api.adminGetLiveState();
@@ -228,6 +267,324 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       }
     } catch (err) {
       console.error('Failed loading live admin state', err);
+    }
+  };
+
+  const loadLiveSessions = async () => {
+    try {
+      const res = await api.getLiveSessions();
+      if (res.ok) {
+        setLiveSessions(res.sessions || []);
+      }
+    } catch (err) {
+      console.error('Failed loading live sessions', err);
+    }
+  };
+
+  const handleCreateLiveSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSessionTitle.trim() || !newSessionDate.trim()) {
+      setLiveActionMsg({ text: 'Please enter Session Title and Scheduled Date/Time.', isError: true });
+      return;
+    }
+    setLiveLoading(true);
+    try {
+      soundEffects.playClick();
+      const res = await api.adminCreateLiveSession({
+        title: newSessionTitle.trim(),
+        scheduled_at: newSessionDate.trim(),
+        timer_seconds: Number(newSessionTimer) || 30,
+        question_count: Number(newSessionQuestions) || 10,
+        department: liveDept
+      });
+      if (res.ok) {
+        soundEffects.playCorrect();
+        setLiveSessions(res.sessions);
+        setNewSessionTitle('');
+        setNewSessionDate('');
+        setLiveActionMsg({ text: `Created scheduled session "${res.session.title}" successfully!`, isError: false });
+      }
+    } catch (err: any) {
+      setLiveActionMsg({ text: err.message || 'Failed to create live session', isError: true });
+      soundEffects.playIncorrect();
+    } finally {
+      setLiveLoading(false);
+    }
+  };
+
+  const handleDeleteLiveSession = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this live session?')) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminDeleteLiveSession(id);
+      if (res.ok) {
+        setLiveSessions(res.sessions);
+        setLiveActionMsg({ text: 'Session deleted successfully.', isError: false });
+      }
+    } catch (err: any) {
+      setLiveActionMsg({ text: err.message || 'Failed to delete session', isError: true });
+    }
+  };
+
+  const handleViewSessionHistory = async (id: string) => {
+    try {
+      soundEffects.playClick();
+      const res = await api.adminGetLiveSessionHistory(id);
+      if (res.ok) {
+        setSelectedSessionHistory(res.session);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed loading session history');
+    }
+  };
+
+  const handleAdmitParticipant = async (pf: string) => {
+    try {
+      soundEffects.playClick();
+      const res = await api.adminAdmitLiveParticipant(pf);
+      if (res.ok) {
+        setLiveAdminState(res.state);
+        setLiveActionMsg({ text: `Admitted PF ${pf} into live competition!`, isError: false });
+      }
+    } catch (err: any) {
+      setLiveActionMsg({ text: err.message || 'Failed to admit participant', isError: true });
+    }
+  };
+
+  const handleAdmitAllWaiting = async () => {
+    try {
+      soundEffects.playClick();
+      const res = await api.adminAdmitAllLive();
+      if (res.ok) {
+        setLiveAdminState(res.state);
+        setLiveActionMsg({ text: `Admitted all ${res.admittedCount} waiting participants into live quiz!`, isError: false });
+      }
+    } catch (err: any) {
+      setLiveActionMsg({ text: err.message || 'Failed to admit all', isError: true });
+    }
+  };
+
+  const handleToggleAutoAdmit = async () => {
+    const nextVal = !liveAdminState?.autoAdmit;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminToggleAutoAdmit(nextVal);
+      if (res.ok) {
+        setLiveAdminState(res.state);
+        setLiveActionMsg({
+          text: nextVal ? 'Auto-Admit is now ENABLED. Participants enter immediately!' : 'Auto-Admit is now DISABLED. Participants wait in waiting room.',
+          isError: false
+        });
+      }
+    } catch (err: any) {
+      setLiveActionMsg({ text: err.message || 'Failed to toggle auto admit', isError: true });
+    }
+  };
+
+  // --- Dynamic Departments & Units Operations ---
+  const loadDepartmentsAndUnits = async () => {
+    try {
+      const dRes = await api.adminGetDepartments();
+      if (dRes.ok) setDepartments(dRes.departments || []);
+      const uRes = await api.adminGetUnits();
+      if (uRes.ok) setUnits(uRes.units || []);
+    } catch (err) {
+      console.error('Failed loading departments and units', err);
+    }
+  };
+
+  const handleAddDept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDeptInput.trim()) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateDepartments({ action: 'add', name: newDeptInput.trim() });
+      if (res.ok) {
+        setDepartments(res.departments);
+        setNewDeptInput('');
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed adding department');
+    }
+  };
+
+  const handleUpdateDept = async (original: string, newName: string) => {
+    if (!newName.trim() || newName.trim() === original) {
+      setEditingDeptItem(null);
+      return;
+    }
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateDepartments({ action: 'update', name: original, newName: newName.trim() });
+      if (res.ok) {
+        setDepartments(res.departments);
+        setEditingDeptItem(null);
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed updating department');
+    }
+  };
+
+  const handleDeleteDept = async (name: string) => {
+    if (!confirm(`Are you sure you want to delete department "${name}"?`)) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateDepartments({ action: 'delete', name });
+      if (res.ok) {
+        setDepartments(res.departments);
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed deleting department');
+    }
+  };
+
+  const handleAddUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUnitInput.trim()) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateUnits({ action: 'add', name: newUnitInput.trim() });
+      if (res.ok) {
+        setUnits(res.units);
+        setNewUnitInput('');
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed adding unit');
+    }
+  };
+
+  const handleUpdateUnit = async (original: string, newName: string) => {
+    if (!newName.trim() || newName.trim() === original) {
+      setEditingUnitItem(null);
+      return;
+    }
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateUnits({ action: 'update', name: original, newName: newName.trim() });
+      if (res.ok) {
+        setUnits(res.units);
+        setEditingUnitItem(null);
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed updating unit');
+    }
+  };
+
+  const handleDeleteUnit = async (name: string) => {
+    if (!confirm(`Are you sure you want to delete unit "${name}"?`)) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminUpdateUnits({ action: 'delete', name });
+      if (res.ok) {
+        setUnits(res.units);
+        soundEffects.playCorrect();
+        if (onSettingsUpdated) onSettingsUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed deleting unit');
+    }
+  };
+
+  // --- Database Tables Explorer Operations ---
+  const loadDbTable = async (tableName: string) => {
+    setSelectedDbTable(tableName);
+    setDbTableLoading(true);
+    setDbTableMsg(null);
+    setEditingDbRow(null);
+    try {
+      const res = await api.adminGetDbTable(tableName);
+      if (res.ok) {
+        setDbTableData(Array.isArray(res.data) ? res.data : [res.data]);
+      }
+    } catch (err: any) {
+      setDbTableMsg({ text: err.message || 'Failed loading table data', isError: true });
+    } finally {
+      setDbTableLoading(false);
+    }
+  };
+
+  const handleSaveDbRowEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDbRow) return;
+    try {
+      const parsed = JSON.parse(editingDbJson);
+      soundEffects.playClick();
+      const rowId = editingDbRow.id || editingDbRow.pf_no || editingDbRow.name;
+      const res = await api.adminUpdateDbTableRow(selectedDbTable, rowId, parsed);
+      if (res.ok) {
+        soundEffects.playCorrect();
+        setDbTableMsg({ text: 'Database record updated successfully!', isError: false });
+        setEditingDbRow(null);
+        loadDbTable(selectedDbTable);
+      }
+    } catch (err: any) {
+      setDbTableMsg({ text: 'Invalid JSON or update error: ' + err.message, isError: true });
+      soundEffects.playIncorrect();
+    }
+  };
+
+  const handleDeleteDbRow = async (row: any) => {
+    const rowId = row.id || row.pf_no || row.name;
+    if (!confirm(`Are you sure you want to delete this record (${rowId}) from table "${selectedDbTable}"?`)) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminDeleteDbTableRow(selectedDbTable, rowId);
+      if (res.ok) {
+        soundEffects.playCorrect();
+        setDbTableMsg({ text: 'Record deleted successfully from database!', isError: false });
+        loadDbTable(selectedDbTable);
+      }
+    } catch (err: any) {
+      setDbTableMsg({ text: err.message || 'Failed to delete record', isError: true });
+      soundEffects.playIncorrect();
+    }
+  };
+
+  // --- Reset User Password Operation ---
+  const handleResetUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetUserModal) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminResetUserPassword(resetUserModal.id, resetUserPass.trim() || '123');
+      if (res.ok) {
+        soundEffects.playCorrect();
+        setResetUserMsg({ text: res.message, isError: false });
+        setTimeout(() => {
+          setResetUserModal(null);
+          setResetUserMsg(null);
+        }, 2000);
+      }
+    } catch (err: any) {
+      setResetUserMsg({ text: err.message || 'Failed to reset password', isError: true });
+      soundEffects.playIncorrect();
+    }
+  };
+
+  // --- Inspect Attempt Trace ---
+  const handleInspectAttempt = async (attemptId: number) => {
+    setInspectLoading(true);
+    setInspectAttemptModal(null);
+    try {
+      soundEffects.playClick();
+      const res = await api.adminGetAttemptDetails(attemptId);
+      if (res.ok) {
+        setInspectAttemptModal(res.details);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to load attempt details');
+    } finally {
+      setInspectLoading(false);
     }
   };
 
@@ -564,6 +921,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
         cvo_name: settings.cvo_name,
         cvo_designation: settings.cvo_designation,
         cvo_organization: settings.cvo_organization,
+        organization_name: settings.organization_name,
+        programme_name: settings.programme_name,
+        programme_period: settings.programme_period,
+        registration_enabled: settings.registration_enabled,
         signature_photo: settings.signature_photo,
         quiz_certificate_template: settings.quiz_certificate_template,
         seal_text: settings.seal_text,
@@ -904,7 +1265,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
           }`}
         >
           <ImageIcon className="w-3.5 h-3.5" />
-          <span>Signature &amp; Certificate Settings</span>
+          <span>Settings &amp; Certificate</span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('dept_units')}
+          className={`px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+            activeTab === 'dept_units' ? 'bg-blue-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Building className="w-3.5 h-3.5" />
+          <span>Departments &amp; Units</span>
+        </button>
+
+        <button
+          onClick={() => handleTabChange('dbtables')}
+          className={`px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+            activeTab === 'dbtables' ? 'bg-blue-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <HardDrive className="w-3.5 h-3.5" />
+          <span>Database Tables</span>
         </button>
 
         <button
@@ -1586,6 +1967,270 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
               </table>
             </div>
           </div>
+
+          {/* --- LIVE WAITING ROOM & ADMISSION CONTROL PANEL --- */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                  <Users className="w-5 h-5 text-amber-700" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span>Live Waiting Room &amp; Participant Admission</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      (liveAdminState?.waitingCount || 0) > 0 ? 'bg-amber-100 text-amber-900 animate-pulse' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {liveAdminState?.waitingCount || 0} Waiting
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Admin can allow participants to join at any point, even after the live quiz has started.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleAutoAdmit}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                    liveAdminState?.autoAdmit
+                      ? 'bg-emerald-600 border-emerald-700 text-white shadow-xs'
+                      : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                  }`}
+                  title="When enabled, participants join immediately without waiting for admin approval"
+                >
+                  {liveAdminState?.autoAdmit ? '✓ Auto-Admit: ON (Instant Entry)' : 'Auto-Admit: OFF (Approval Required)'}
+                </button>
+
+                {(liveAdminState?.waitingCount || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAdmitAllWaiting}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Admit All ({liveAdminState.waitingCount})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Waiting Participants Table */}
+            {liveAdminState?.waitingList && liveAdminState.waitingList.length > 0 ? (
+              <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3">PF Number</th>
+                      <th className="py-2.5 px-3">Name</th>
+                      <th className="py-2.5 px-3">Designation</th>
+                      <th className="py-2.5 px-3">Department &amp; Unit</th>
+                      <th className="py-2.5 px-3">Mobile</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {liveAdminState.waitingList.map((w: any) => (
+                      <tr key={w.pf} className="hover:bg-amber-50/40">
+                        <td className="py-2.5 px-3 font-mono font-bold text-blue-950">{w.pf}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">{w.name}</td>
+                        <td className="py-2.5 px-3 text-slate-600">{w.designation}</td>
+                        <td className="py-2.5 px-3 text-slate-600">{w.department} · {w.unit}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">{w.mobile}</td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleAdmitParticipant(w.pf)}
+                            className="px-3.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-xs transition-colors text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>Admit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 text-center">
+                Waiting room is currently empty. Participants will appear here when they request to join.
+              </div>
+            )}
+          </div>
+
+          {/* --- LIVE QUIZ SCHEDULE CREATION & SESSION HISTORY --- */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
+            <div className="pb-3 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-900" />
+                <span>Live Quiz Schedule Management &amp; Session History</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Admin can create distinct live quiz schedules. Each session maintains distinct participant history and question-by-question attempt records.
+              </p>
+            </div>
+
+            {/* Schedule New Live Session Form */}
+            <form onSubmit={handleCreateLiveSession} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                + Schedule New Live Competition Session
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="lg:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Session Title <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newSessionTitle}
+                    onChange={e => setNewSessionTitle(e.target.value)}
+                    placeholder="e.g. Workshop Round 1 - Mechanical"
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Scheduled Date &amp; Time <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={newSessionDate}
+                    onChange={e => setNewSessionDate(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Timer per Q (Sec)
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={180}
+                    value={newSessionTimer}
+                    onChange={e => setNewSessionTimer(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Question Count
+                  </label>
+                  <input
+                    type="number"
+                    min={3}
+                    max={50}
+                    value={newSessionQuestions}
+                    onChange={e => setNewSessionQuestions(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  disabled={liveLoading}
+                  className="px-5 py-2 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Live Quiz Schedule</span>
+                </button>
+              </div>
+            </form>
+
+            {/* List of Scheduled / Past Sessions */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                Scheduled &amp; Past Live Sessions ({liveSessions.length})
+              </h4>
+
+              {liveSessions && liveSessions.length > 0 ? (
+                <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
+                  <table className="w-full text-left">
+                    <thead className="bg-[#071a3a] text-white font-semibold">
+                      <tr>
+                        <th className="py-2.5 px-3">Session ID</th>
+                        <th className="py-2.5 px-3">Title</th>
+                        <th className="py-2.5 px-3">Scheduled At</th>
+                        <th className="py-2.5 px-3 text-center">Timer / Qs</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                        <th className="py-2.5 px-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {liveSessions.map((sess) => (
+                        <tr key={sess.id} className="hover:bg-slate-50">
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{sess.id}</td>
+                          <td className="py-2.5 px-3 font-semibold text-slate-900">{sess.title}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-600">{sess.scheduled_at}</td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                            {sess.timer_seconds}s · {sess.question_count} Qs
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              sess.status === 'completed'
+                                ? 'bg-slate-100 text-slate-700'
+                                : sess.status === 'in_progress'
+                                ? 'bg-rose-100 text-rose-800 animate-pulse'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {sess.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right space-x-1.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLiveTimerSeconds(sess.timer_seconds);
+                                setLiveQuestionCount(sess.question_count);
+                                handleStartLobby();
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[11px]"
+                              title="Start Live Lobby for this session"
+                            >
+                              Launch Lobby
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleViewSessionHistory(sess.id)}
+                              className="px-2.5 py-1 bg-blue-900 hover:bg-blue-800 text-white font-semibold rounded text-[11px]"
+                              title="View Participant Scores & Answers for this Session"
+                            >
+                              View History
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLiveSession(sess.id)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                              title="Delete Session"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 text-center">
+                  No live quiz schedules created yet. Use the form above to schedule a live quiz competition.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -2195,11 +2840,93 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
               </div>
 
+              {/* Programme & Organization Settings (Updates Dashboard & Certificates) */}
+              <div className="p-5 border border-blue-200 rounded-xl bg-blue-50/40 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Building className="w-4 h-4 text-blue-900" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-blue-950">
+                    Programme &amp; Organization Master Configuration
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-600">
+                  Changing these fields automatically changes the public dashboard headers, titles, certificates, and reports.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Organization Name <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={settings.organization_name || ''}
+                      onChange={e => setSettings({ ...settings, organization_name: e.target.value })}
+                      placeholder="e.g. Chittaranjan Locomotive Works (CLW)"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Quiz / Programme Name <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={settings.programme_name || ''}
+                      onChange={e => setSettings({ ...settings, programme_name: e.target.value })}
+                      placeholder="e.g. Vigilance Awareness Week 2026 Quiz Competition"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Period of Programme / Dates <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={settings.programme_period || ''}
+                      onChange={e => setSettings({ ...settings, programme_period: e.target.value })}
+                      placeholder="e.g. 27th October to 2nd November 2026"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 bg-white"
+                    />
+                  </div>
+                </div>
+
+                {/* New User Registration Control Toggle */}
+                <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">
+                      New User Registration Access Control
+                    </div>
+                    <div className="text-[11px] text-slate-500">
+                      Enable or disable the public "New Registration" button. When disabled, only already registered users can log in with PF and password (123).
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.registration_enabled !== false}
+                      onChange={e => setSettings({ ...settings, registration_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                    <span className="ml-3 text-xs font-bold text-slate-700">
+                      {settings.registration_enabled !== false ? 'Registration ENABLED' : 'Registration DISABLED'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               {/* Signatory Text Details */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    CVO Full Name
+                    Officer Full Name (Who Issues Certificate)
                   </label>
                   <input
                     type="text"
@@ -2212,7 +2939,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Designation
+                    Officer Designation
                   </label>
                   <input
                     type="text"
@@ -2225,7 +2952,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Organization / Location
+                    Issuing Organization / Division
                   </label>
                   <input
                     type="text"
@@ -2286,10 +3013,328 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                   className="px-6 py-2.5 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-2"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Save Signature &amp; Settings</span>
+                  <span>Save Master Settings &amp; Certificate Config</span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB: DYNAMIC DEPARTMENTS & UNITS MANAGEMENT --- */}
+      {activeTab === 'dept_units' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
+            <div className="pb-4 border-b border-slate-200 mb-6">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Building className="w-5 h-5 text-blue-950" />
+                <span>Departments &amp; Units Master Management</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Admin can add new departments/units, rename them, or remove them. The registration form and common schedule update dynamically.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Departments Column */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <span>Departments ({departments.length})</span>
+                  </h4>
+                </div>
+
+                {/* Add Department Form */}
+                <form onSubmit={handleAddDept} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newDeptInput}
+                    onChange={e => setNewDeptInput(e.target.value)}
+                    placeholder="Enter new department name..."
+                    className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </form>
+
+                {/* Departments List */}
+                <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                  {departments.map((dept, idx) => (
+                    <div key={`dept-manage-${dept}-${idx}`} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50 text-xs">
+                      {editingDeptItem?.original === dept ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="text"
+                            value={editingDeptItem.current}
+                            onChange={e => setEditingDeptItem({ ...editingDeptItem, current: e.target.value })}
+                            className="flex-1 px-2 py-1 text-xs border border-blue-400 rounded"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateDept(editingDeptItem.original, editingDeptItem.current)}
+                            className="p-1 text-emerald-700 hover:bg-emerald-50 rounded"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDeptItem(null)}
+                            className="p-1 text-slate-500 hover:bg-slate-100 rounded"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="font-medium text-slate-800">{dept}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingDeptItem({ original: dept, current: dept })}
+                              className="p-1 text-slate-500 hover:text-blue-950 hover:bg-slate-100 rounded"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDept(dept)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Units Column */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <span>Units &amp; Workshops ({units.length})</span>
+                  </h4>
+                </div>
+
+                {/* Add Unit Form */}
+                <form onSubmit={handleAddUnit} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newUnitInput}
+                    onChange={e => setNewUnitInput(e.target.value)}
+                    placeholder="Enter new workshop / unit name..."
+                    className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </form>
+
+                {/* Units List */}
+                <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                  {units.map((u, idx) => (
+                    <div key={`unit-manage-${u}-${idx}`} className="p-2.5 flex items-center justify-between gap-2 hover:bg-slate-50 text-xs">
+                      {editingUnitItem?.original === u ? (
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="text"
+                            value={editingUnitItem.current}
+                            onChange={e => setEditingUnitItem({ ...editingUnitItem, current: e.target.value })}
+                            className="flex-1 px-2 py-1 text-xs border border-blue-400 rounded"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateUnit(editingUnitItem.original, editingUnitItem.current)}
+                            className="p-1 text-emerald-700 hover:bg-emerald-50 rounded"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingUnitItem(null)}
+                            className="p-1 text-slate-500 hover:bg-slate-100 rounded"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="font-medium text-slate-800">{u}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingUnitItem({ original: u, current: u })}
+                              className="p-1 text-slate-500 hover:text-blue-950 hover:bg-slate-100 rounded"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUnit(u)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB: DIRECT DATABASE TABLES EXPLORER & MODIFIER --- */}
+      {activeTab === 'dbtables' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <HardDrive className="w-5 h-5 text-blue-900" />
+                  <span>Direct Database Tables Access &amp; Modification</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Directly inspect database tables, edit rows, reset user passwords, and manage database records.
+                </p>
+              </div>
+
+              {/* Table Selector Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+                {['participants', 'attempts', 'questions', 'departments', 'units', 'live_sessions', 'settings'].map(tbl => (
+                  <button
+                    key={tbl}
+                    type="button"
+                    onClick={() => loadDbTable(tbl)}
+                    className={`px-3 py-1.5 rounded-lg border font-mono transition-colors ${
+                      selectedDbTable === tbl
+                        ? 'bg-blue-950 text-white border-blue-900 shadow-xs'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    {tbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {dbTableMsg && (
+              <div className={`p-3 rounded-lg text-xs flex items-center justify-between gap-2 ${
+                dbTableMsg.isError ? 'bg-rose-50 border border-rose-200 text-rose-800' : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+              }`}>
+                <span>{dbTableMsg.text}</span>
+                <button type="button" onClick={() => setDbTableMsg(null)} className="font-bold">✕</button>
+              </div>
+            )}
+
+            {/* Table Search & Record Count */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={dbTableSearch}
+                  onChange={e => setDbTableSearch(e.target.value)}
+                  placeholder={`Search in table "${selectedDbTable}"...`}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none"
+                />
+              </div>
+
+              <div className="text-xs font-mono text-slate-500">
+                {dbTableData ? `${dbTableData.length} records in ${selectedDbTable}` : 'Loading...'}
+              </div>
+            </div>
+
+            {/* Table Display */}
+            <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
+              {dbTableLoading ? (
+                <div className="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Loading table data...</span>
+                </div>
+              ) : dbTableData && dbTableData.length > 0 ? (
+                <table className="w-full text-left font-mono">
+                  <thead className="bg-[#071a3a] text-white">
+                    <tr>
+                      <th className="py-2.5 px-3">Actions</th>
+                      {Object.keys(dbTableData[0] || {}).map(key => (
+                        <th key={key} className="py-2.5 px-3">{key}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-sans text-[11px]">
+                    {dbTableData
+                      .filter(row => !dbTableSearch || JSON.stringify(row).toLowerCase().includes(dbTableSearch.toLowerCase()))
+                      .slice(0, 50)
+                      .map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 font-mono">
+                          <td className="py-2 px-3 whitespace-nowrap space-x-1 font-sans">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDbRow(row);
+                                setEditingDbJson(JSON.stringify(row, null, 2));
+                              }}
+                              className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200 rounded text-[10px] font-bold hover:bg-blue-100"
+                            >
+                              Edit
+                            </button>
+                            {selectedDbTable === 'participants' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setResetUserModal({ id: row.id, name: row.name, pf: row.pf_no });
+                                  setResetUserPass('123');
+                                }}
+                                className="px-2 py-0.5 bg-amber-50 text-amber-900 border border-amber-200 rounded text-[10px] font-bold hover:bg-amber-100"
+                              >
+                                Reset Pass
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDbRow(row)}
+                              className="px-2 py-0.5 text-rose-700 border border-rose-200 rounded text-[10px] font-bold hover:bg-rose-50"
+                            >
+                              Del
+                            </button>
+                          </td>
+
+                          {Object.keys(dbTableData[0] || {}).map(key => (
+                            <td key={key} className="py-2 px-3 max-w-xs truncate" title={String(row[key])}>
+                              {typeof row[key] === 'object' ? JSON.stringify(row[key]) : String(row[key] ?? '—')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center text-slate-400">
+                  No records in table {selectedDbTable}.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2423,6 +3468,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                     <th className="py-2 px-3 text-left">Status</th>
                     <th className="py-2 px-3 text-right">Score</th>
                     <th className="py-2 px-3 text-left">Submitted At</th>
+                    <th className="py-2 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -2450,11 +3496,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                       <td className="py-2 px-3 text-slate-500 text-[11px] font-mono">
                         {r.submitted_at ? r.submitted_at.slice(0, 16) : '—'}
                       </td>
+                      <td className="py-2 px-3 text-right space-x-1.5 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleInspectAttempt(r.pf_no as any)}
+                          className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 text-white rounded font-bold text-[10px] inline-flex items-center gap-1"
+                          title="Inspect Attempt Questions & Answers"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Trace Q&amp;A</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetUserModal({ id: 0, name: r.name, pf: r.pf_no });
+                            setResetUserPass('123');
+                          }}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded font-semibold text-[10px]"
+                          title="Reset User Password to default 123"
+                        >
+                          Reset Pass
+                        </button>
+                        <a
+                          href={`?pf=${encodeURIComponent(r.pf_no)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-1 text-slate-500 hover:text-slate-800 inline-block align-middle"
+                          title="View Certificate"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </td>
                     </tr>
                   ))}
                   {filteredResults.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-slate-400">
+                      <td colSpan={9} className="text-center py-8 text-slate-400">
                         No participant attempts found.
                       </td>
                     </tr>
@@ -2573,6 +3650,284 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
               Update Password
             </button>
           </form>
+        </div>
+      )}
+
+      {/* --- MODAL: ATTEMPT QUESTION-BY-QUESTION TRACE --- */}
+      {inspectAttemptModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Question-by-Question Attempt Trace
+                </h3>
+                <div className="text-xs text-slate-500 font-mono mt-0.5">
+                  Participant: <strong>{inspectAttemptModal.participant?.name}</strong> ({inspectAttemptModal.participant?.pf_no}) · Score: <strong className="text-blue-900 font-bold">{inspectAttemptModal.attempt?.score} / {inspectAttemptModal.attempt?.max_score}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectAttemptModal(null)}
+                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-slate-500 block">Department:</span>
+                  <span className="font-bold text-slate-800">{inspectAttemptModal.participant?.department}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Designation:</span>
+                  <span className="font-bold text-slate-800">{inspectAttemptModal.participant?.designation}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Unit:</span>
+                  <span className="font-bold text-slate-800">{inspectAttemptModal.participant?.unit_name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block">Submitted At:</span>
+                  <span className="font-mono text-slate-800">{inspectAttemptModal.attempt?.submitted_at?.slice(0, 16)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Attempt Questions ({inspectAttemptModal.questions?.length || 0})
+                </h4>
+
+                {inspectAttemptModal.questions?.map((q: any) => (
+                  <div
+                    key={q.question_index}
+                    className={`p-3.5 rounded-xl border text-xs space-y-2 ${
+                      q.is_correct
+                        ? 'bg-emerald-50/50 border-emerald-200'
+                        : q.is_skipped
+                        ? 'bg-slate-50 border-slate-200 text-slate-600'
+                        : 'bg-rose-50/50 border-rose-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-slate-900">
+                        Q{q.question_index + 1}. {q.question_text}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                        q.is_correct
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : q.is_skipped
+                          ? 'bg-slate-200 text-slate-700'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {q.is_correct ? '+100 Correct' : q.is_skipped ? '0 Skipped' : '-50 Wrong'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                      <div className="p-2 bg-white rounded border border-slate-200">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Selected Answer:</span>
+                        <span className={q.is_correct ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                          {q.selected_option_text || '(Not Answered)'}
+                        </span>
+                      </div>
+                      <div className="p-2 bg-white rounded border border-slate-200">
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Correct Answer:</span>
+                        <span className="text-emerald-800 font-bold">
+                          {q.correct_option_text}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 flex justify-end bg-slate-50 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setInspectAttemptModal(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-xs"
+              >
+                Close Trace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: RESET USER PASSWORD --- */}
+      {resetUserModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              Reset Participant Password
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Reset login credentials for <strong>{resetUserModal.name}</strong> (PF: {resetUserModal.pf}). Default is <code className="font-bold text-amber-700">123</code>.
+            </p>
+
+            <form onSubmit={handleResetUserPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  New Password
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={resetUserPass}
+                  onChange={e => setResetUserPass(e.target.value)}
+                  placeholder="e.g. 123"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 font-mono"
+                />
+              </div>
+
+              {resetUserMsg && (
+                <div className={`p-2.5 rounded-lg text-xs ${
+                  resetUserMsg.isError ? 'bg-rose-50 text-rose-800 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                }`}>
+                  {resetUserMsg.text}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetUserModal(null);
+                    setResetUserMsg(null);
+                  }}
+                  className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow-xs"
+                >
+                  Confirm Reset
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: LIVE SESSION PARTICIPANT HISTORY --- */}
+      {selectedSessionHistory && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-2xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl">
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">
+                  Live Session History: {selectedSessionHistory.title}
+                </h3>
+                <div className="text-xs text-slate-500 font-mono mt-0.5">
+                  Session ID: <strong>{selectedSessionHistory.id}</strong> · Scheduled: {selectedSessionHistory.scheduled_at} · Status: <strong>{selectedSessionHistory.status}</strong>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedSessionHistory(null)}
+                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Leaderboard Table of Session */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                  Session Final Leaderboard ({selectedSessionHistory.history?.leaderboard?.length || 0} Participants)
+                </h4>
+
+                {selectedSessionHistory.history?.leaderboard && selectedSessionHistory.history.leaderboard.length > 0 ? (
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-[#071a3a] text-white">
+                        <tr>
+                          <th className="py-2 px-3">Rank</th>
+                          <th className="py-2 px-3">PF No</th>
+                          <th className="py-2 px-3">Participant Name</th>
+                          <th className="py-2 px-3">Department</th>
+                          <th className="py-2 px-3 text-right">Score</th>
+                          <th className="py-2 px-3 text-right">Time Taken</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-sans">
+                        {selectedSessionHistory.history.leaderboard.map((lb: any) => (
+                          <tr key={lb.id || lb.pf} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 font-bold font-mono">#{lb.rank}</td>
+                            <td className="py-2 px-3 font-mono font-semibold text-blue-950">{lb.pf}</td>
+                            <td className="py-2 px-3 font-semibold text-slate-900">{lb.name}</td>
+                            <td className="py-2 px-3 text-slate-600">{lb.department}</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">{lb.score} pts</td>
+                            <td className="py-2 px-3 text-right font-mono text-slate-600">{lb.totalTimeTaken}s</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-6 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                    No completed quiz history recorded for this session yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 flex justify-end bg-slate-50 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => setSelectedSessionHistory(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-lg shadow-xs"
+              >
+                Close Session History
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: DB ROW EDITOR --- */}
+      {editingDbRow && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-slate-900 mb-1">
+              Edit Table Record: {selectedDbTable}
+            </h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Modify the JSON values below and click Save Changes to persist directly into database.
+            </p>
+
+            <form onSubmit={handleSaveDbRowEdit} className="space-y-4">
+              <textarea
+                rows={12}
+                value={editingDbJson}
+                onChange={e => setEditingDbJson(e.target.value)}
+                className="w-full p-3 font-mono text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900 bg-slate-50"
+              />
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDbRow(null)}
+                  className="px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white font-bold text-xs rounded-lg shadow-xs"
+                >
+                  Save Record
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

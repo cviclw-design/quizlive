@@ -42,11 +42,23 @@ export interface LeaderboardEntry {
   lastTimeTaken?: number;
 }
 
+export interface WaitingParticipant {
+  pf: string;
+  name: string;
+  designation: string;
+  department: string;
+  unit: string;
+  mobile: string;
+  requestedAt: number;
+}
+
 export type LiveQuizStatus = 'idle' | 'lobby' | 'question' | 'time_lapsed' | 'review' | 'ended';
 
 class LiveQuizManager {
   private status: LiveQuizStatus = 'idle';
   private sessionCode: string = 'CLW 2026';
+  private activeSessionId: string = 'LIVE-DEFAULT';
+  private activeSessionTitle: string = 'Live Vigilance Awareness Quiz';
   private timerSeconds: number = 30; // Configurable by Admin per question (e.g. 15, 20, 30, 45, 60)
   private questionCount: number = 10;
   private questions: QuestionItem[] = [];
@@ -54,6 +66,9 @@ class LiveQuizManager {
   private questionStartTime: number = 0;
   private questionEndTime: number = 0;
   private participants: Map<string, LiveParticipant> = new Map();
+  private waitingParticipants: Map<string, WaitingParticipant> = new Map();
+  private admittedPfSet: Set<string> = new Set();
+  private autoAdmit: boolean = false; // Admin controls whether participants are admitted automatically
   private wsClients: Set<WebSocket> = new Set();
   private autoReviewTimeout: NodeJS.Timeout | null = null;
   private autoNextTimeout: NodeJS.Timeout | null = null;
@@ -99,17 +114,24 @@ class LiveQuizManager {
 
     switch (data.type) {
       case 'join': {
-        const participant = this.registerParticipant(data.payload);
-        if (participant) {
+        const joinResult = this.requestJoinLive(data.payload);
+        if (joinResult.status === 'admitted') {
           ws.send(JSON.stringify({
             type: 'join_success',
-            participant
+            participant: joinResult.participant,
+            state: this.getPublicState()
           }));
           this.broadcast({
             type: 'participant_joined',
             participantCount: this.participants.size,
             leaderboard: this.getLeaderboard().slice(0, 10)
           });
+        } else {
+          ws.send(JSON.stringify({
+            type: 'waiting_room',
+            message: 'Waiting for administrator to admit you into the live quiz.',
+            waitingParticipant: joinResult.participant
+          }));
         }
         break;
       }
@@ -152,6 +174,160 @@ class LiveQuizManager {
         }
       }
     }
+  }
+
+  // --- Waiting Room & Admission ---
+  public requestJoinLive(data: {
+    pf: string;
+    password?: string;
+    name?: string;
+    designation?: string;
+    department?: string;
+    unit?: string;
+    mobile?: string;
+  }): { ok: boolean; status: 'admitted' | 'waiting'; participant?: any; error?: string } {
+    const cleanPf = String(data.pf || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!cleanPf) return { ok: false, status: 'waiting', error: 'Please enter a valid PF number.' };
+
+    // Check DB registration
+    let dbP = db.getParticipantByPf(cleanPf);
+    if (!dbP) {
+      if (!data.name || !data.designation || !data.department) {
+        return { ok: false, status: 'waiting', error: 'Participant not registered. Please enter Name, Designation, and Department.' };
+      }
+      dbP = db.registerParticipant({
+        pf_no: cleanPf,
+        name: data.name,
+        designation: data.designation,
+        department: data.department,
+        unit_name: data.unit || 'Chittaranjan Locomotive Works',
+        mobile: data.mobile || '9999999999',
+        password: data.password || '123'
+      });
+    }
+
+    // Verify password if supplied or default 123
+    if (data.password && data.password.trim()) {
+      const v = db.verifyParticipantLogin(cleanPf, data.password);
+      if (!v.ok) {
+        return { ok: false, status: 'waiting', error: v.error };
+      }
+    }
+
+    // Check if auto-admit is ON or participant already admitted
+    if (this.autoAdmit || this.admittedPfSet.has(cleanPf)) {
+      this.admittedPfSet.add(cleanPf);
+      this.waitingParticipants.delete(cleanPf);
+      const lp = this.registerParticipant({
+        pf: dbP.pf_no,
+        name: dbP.name,
+        designation: dbP.designation,
+        department: dbP.department,
+        unit: dbP.unit_name,
+        mobile: dbP.mobile
+      });
+      return { ok: true, status: 'admitted', participant: lp };
+    }
+
+    // Otherwise place into Waiting Room!
+    const waiting: WaitingParticipant = {
+      pf: dbP.pf_no,
+      name: dbP.name,
+      designation: dbP.designation,
+      department: dbP.department,
+      unit: dbP.unit_name,
+      mobile: dbP.mobile,
+      requestedAt: Date.now()
+    };
+    this.waitingParticipants.set(cleanPf, waiting);
+
+    this.broadcast({
+      type: 'waiting_room_updated',
+      waitingCount: this.waitingParticipants.size,
+      waitingList: Array.from(this.waitingParticipants.values())
+    });
+
+    return {
+      ok: true,
+      status: 'waiting',
+      participant: waiting
+    };
+  }
+
+  public admitParticipant(pf: string): boolean {
+    const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
+    const waiting = this.waitingParticipants.get(cleanPf);
+    this.admittedPfSet.add(cleanPf);
+    this.waitingParticipants.delete(cleanPf);
+
+    let participantObj: LiveParticipant | null = null;
+    if (waiting) {
+      participantObj = this.registerParticipant({
+        pf: waiting.pf,
+        name: waiting.name,
+        designation: waiting.designation,
+        department: waiting.department,
+        unit: waiting.unit,
+        mobile: waiting.mobile
+      });
+    } else {
+      const dbP = db.getParticipantByPf(cleanPf);
+      if (dbP) {
+        participantObj = this.registerParticipant({
+          pf: dbP.pf_no,
+          name: dbP.name,
+          designation: dbP.designation,
+          department: dbP.department,
+          unit: dbP.unit_name,
+          mobile: dbP.mobile
+        });
+      }
+    }
+
+    this.broadcast({
+      type: 'participant_admitted',
+      pf: cleanPf,
+      participant: participantObj,
+      state: this.getPublicState()
+    });
+
+    return true;
+  }
+
+  public admitAllWaiting(): number {
+    const list = Array.from(this.waitingParticipants.values());
+    list.forEach(w => {
+      this.admittedPfSet.add(w.pf);
+      this.registerParticipant({
+        pf: w.pf,
+        name: w.name,
+        designation: w.designation,
+        department: w.department,
+        unit: w.unit,
+        mobile: w.mobile
+      });
+    });
+    this.waitingParticipants.clear();
+
+    this.broadcast({
+      type: 'all_admitted',
+      count: list.length,
+      state: this.getPublicState()
+    });
+
+    return list.length;
+  }
+
+  public setAutoAdmit(enabled: boolean): boolean {
+    this.autoAdmit = Boolean(enabled);
+    if (this.autoAdmit && this.waitingParticipants.size > 0) {
+      this.admitAllWaiting();
+    }
+    this.broadcast({
+      type: 'auto_admit_updated',
+      autoAdmit: this.autoAdmit
+    });
+    return this.autoAdmit;
   }
 
   // --- Participant Operations ---
@@ -286,10 +462,19 @@ class LiveQuizManager {
   }
 
   // --- Admin Live Controls ---
-  public startLobby(options?: { timerSeconds?: number; questionCount?: number; department?: string }) {
+  public startLobby(options?: { sessionId?: string; title?: string; timerSeconds?: number; questionCount?: number; department?: string }) {
     if (this.autoReviewTimeout) {
       clearTimeout(this.autoReviewTimeout);
       this.autoReviewTimeout = null;
+    }
+
+    if (options?.sessionId) {
+      this.activeSessionId = options.sessionId;
+    } else {
+      this.activeSessionId = `LIVE-${Date.now().toString().slice(-6)}`;
+    }
+    if (options?.title) {
+      this.activeSessionTitle = options.title;
     }
 
     if (options?.timerSeconds) {
@@ -550,6 +735,46 @@ class LiveQuizManager {
       }
     }
 
+    // Save live session history into db
+    const answersRecord: Record<string, any> = {};
+    for (const [pf, p] of this.participants.entries()) {
+      answersRecord[pf] = {
+        name: p.name,
+        designation: p.designation,
+        department: p.department,
+        unit: p.unit,
+        marks: p.marks,
+        score: p.score,
+        correctCount: p.correctCount,
+        totalTimeTaken: p.totalTimeTaken,
+        answers: p.answers
+      };
+    }
+
+    try {
+      db.saveLiveSessionResult(this.activeSessionId, {
+        title: this.activeSessionTitle || `Live Quiz Session ${this.activeSessionId}`,
+        timer_seconds: this.timerSeconds,
+        question_count: this.questionCount,
+        participants_count: this.participants.size,
+        history: {
+          ended_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          questions: this.questions.map((q, idx) => ({
+            id: q.id,
+            index: idx,
+            question: q.question,
+            department: q.department,
+            options: [q.option_a, q.option_b, q.option_c, q.option_d],
+            correct_index: q.correct_index
+          })),
+          leaderboard: finalLeaderboard,
+          participant_answers: answersRecord
+        }
+      });
+    } catch (e) {
+      console.error('Error saving live session to DB:', e);
+    }
+
     this.broadcast({
       type: 'quiz_ended',
       leaderboard: finalLeaderboard,
@@ -568,6 +793,8 @@ class LiveQuizManager {
     this.currentIndex = 0;
     this.questions = [];
     this.participants.clear();
+    this.waitingParticipants.clear();
+    this.admittedPfSet.clear();
 
     this.broadcast({
       type: 'session_reset',
@@ -661,12 +888,16 @@ class LiveQuizManager {
       ok: true,
       status: this.status,
       sessionCode: this.sessionCode,
+      activeSessionId: this.activeSessionId,
+      activeSessionTitle: this.activeSessionTitle,
       timerSeconds: this.timerSeconds,
       questionCount: this.questions.length || this.questionCount,
       currentIndex: this.currentIndex,
       questionStartTime: this.questionStartTime,
       questionEndTime: this.questionEndTime,
       participantCount: this.participants.size,
+      waitingCount: this.waitingParticipants.size,
+      autoAdmit: this.autoAdmit,
       activeQuestion: sanitizedQuestion,
       reviewData,
       leaderboard: this.getLeaderboard(),
@@ -683,7 +914,10 @@ class LiveQuizManager {
     return {
       ...pub,
       correctIndex: currentQ ? currentQ.correct_index : null,
-      participantsList: Array.from(this.participants.values())
+      participantsList: Array.from(this.participants.values()),
+      waitingParticipants: Array.from(this.waitingParticipants.values()),
+      admittedPfList: Array.from(this.admittedPfSet),
+      autoAdmit: this.autoAdmit
     };
   }
 }

@@ -31,7 +31,11 @@
     "slogan_english": "Probity for Prosperity",
     "quiz_certificate_template": null,
     "pledge_certificate_template": null,
-    "updated_at": "2026-10-14 07:31:45"
+    "updated_at": "2026-10-14 07:31:45",
+    "organization_name": "Chittaranjan Locomotive Works (CLW)",
+    "programme_name": "Vigilance Awareness Week 2026 Quiz Competition",
+    "programme_period": "27th October to 2nd November 2026",
+    "registration_enabled": true
   },
   "questions": [
     {
@@ -322,9 +326,9 @@
     },
     {
       "id": 23,
-     "department": "All",
-     "question": "A procurement officer divides one large requirement into several smaller purchases solely to avoid the prescribed approval or tendering threshold. This practice is best described as:",
-     "option_a": "Delegation of powers",
+      "department": "All",
+      "question": "A procurement officer divides one large requirement into several smaller purchases solely to avoid the prescribed approval or tendering threshold. This practice is best described as:",
+      "option_a": "Delegation of powers",
       "option_b": "Decentralisation",
       "option_c": "Improper splitting of procurement",
       "option_d": "Normal inventory management",
@@ -335,7 +339,7 @@
     },
     {
       "id": 24,
-     "department": "All",
+      "department": "All",
       "question": "What is the limit up to which a railway employee can acquire or dispose of immovable property without prior intimation or sanction from the prescribed authority under Conduct Rules?",
       "option_a": "Transactions up to Rs. 10,000",
       "option_b": "Transactions up to Rs. 50,000",
@@ -348,9 +352,9 @@
     },
     {
       "id": 25,
-     "department": "All",
-     "question": "Which Act provides the principal statutory framework for railway operations, passenger and goods carriage, and various railway-related offences in India?",
-     "option_a": "Indian Railways Act, 1890",
+      "department": "All",
+      "question": "Which Act provides the principal statutory framework for railway operations, passenger and goods carriage, and various railway-related offences in India?",
+      "option_a": "Indian Railways Act, 1890",
       "option_b": "Railways Act, 1989",
       "option_c": "Railway Board Act, 1905",
       "option_d": "Public Premises Act, 1971",
@@ -366,13 +370,12 @@
       "option_a": "Ministry of Railways",
       "option_b": "Ministry of Home Affairs",
       "option_c": "Ministry of Civil Aviation",
-     "option_d": "Ministry of Road Transport and Highways",
+      "option_d": "Ministry of Road Transport and Highways",
       "correct_index": 2,
       "source": "sample",
       "sort_order": 26,
       "created_at": "2026-10-15 00:00:00"
     }
-
   ],
   "schedules": [
     {
@@ -476,7 +479,19 @@
       "department": "Accounts",
       "unit_name": "Chittaranjan Locomotive Works",
       "mobile": "9999999999",
-      "created_at": "2026-10-14 17:10:36"
+      "created_at": "2026-10-14 17:10:36",
+      "password": "123"
+    },
+    {
+      "id": 2,
+      "pf_no": "51101412769",
+      "name": "CHANDRA PRAKASH CHAUHAN",
+      "designation": "CVI",
+      "department": "Vigilance",
+      "unit_name": "Chittaranjan Locomotive Works",
+      "mobile": "7908352053",
+      "password": "123",
+      "created_at": "2026-10-16 12:19:58"
     }
   ],
   "attempts": [
@@ -562,8 +577,38 @@
   "seq": {
     "admin": 2,
     "question": 20,
-    "participant": 1,
+    "participant": 2,
     "attempt": 2,
     "audit": 4
-  }
+  },
+  "departments": [
+    "Personnel",
+    "Accounts",
+    "Stores",
+    "Electrical",
+    "Mechanical",
+    "Security (RPF)",
+    "Signal & Telecom",
+    "Civil Engineering",
+    "Vigilance",
+    "Engineering",
+    "Medical",
+    "General Administration",
+    "Rajbhasha"
+  ],
+  "units": [
+    "CLW Headquarters",
+    "Administrative Building",
+    "Workshop",
+    "Steel Foundry",
+    "Traction Motor Shop",
+    "Fabrication Shop",
+    "Stores Depot",
+    "KG Hospital",
+    "ELAAU Dankuni",
+    "Manufacturing",
+    "Works Office",
+    "Engineering"
+  ],
+  "live_sessions": []
 }

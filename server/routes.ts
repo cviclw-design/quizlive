@@ -40,18 +40,23 @@ function requireAdmin(req: Request, res: Response, next: () => void) {
 
 // --- Public Endpoints ---
 
-// Home info: departments, units, schedules, CVO public settings
+// Home info: departments, units, schedules, CVO public settings, programme info
 apiRouter.get('/home', (_req, res) => {
   const settings = db.getSettings();
   res.json({
     ok: true,
-    departments: DEPARTMENTS,
-    units: UNITS,
+    departments: db.getDepartments(),
+    units: db.getUnits(),
     schedule: db.getSchedules(),
+    live_sessions: db.getLiveSessions(),
     settings: {
       cvo_name: settings.cvo_name,
       cvo_designation: settings.cvo_designation,
       cvo_organization: settings.cvo_organization,
+      organization_name: settings.organization_name || 'Chittaranjan Locomotive Works (CLW)',
+      programme_name: settings.programme_name || 'Vigilance Awareness Week 2026 Quiz Competition',
+      programme_period: settings.programme_period || '27th October to 2nd November 2026',
+      registration_enabled: settings.registration_enabled !== false,
       seal_text: settings.seal_text,
       logo_url: settings.logo_url,
       has_signature: !!settings.signature_photo,
@@ -68,15 +73,84 @@ apiRouter.get('/home', (_req, res) => {
   });
 });
 
+// User / Participant Login with PF No & default password 123
+apiRouter.post('/user/login', (req, res) => {
+  const { pf, password } = req.body || {};
+  const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
+  const pass = String(password || '').trim() || '123';
+
+  if (!cleanPf) {
+    res.status(422).json({ ok: false, error: 'Please enter your PF Number.' });
+    return;
+  }
+
+  const result = db.verifyParticipantLogin(cleanPf, pass);
+  if (!result.ok || !result.participant) {
+    res.status(401).json({ ok: false, error: result.error || 'Invalid credentials' });
+    return;
+  }
+
+  const p = result.participant;
+  const attempt = db.getAttemptByParticipantId(p.id);
+
+  res.json({
+    ok: true,
+    participant: {
+      id: p.id,
+      pf: p.pf_no,
+      name: p.name,
+      designation: p.designation,
+      department: p.department,
+      unit: p.unit_name,
+      mobile: p.mobile
+    },
+    attempt: attempt ? {
+      id: attempt.id,
+      status: attempt.status,
+      score: attempt.score,
+      max: attempt.max_score,
+      rank: attempt.rank,
+      duration_seconds: attempt.duration_seconds,
+      submitted_at: attempt.submitted_at
+    } : null
+  });
+});
+
+// User password change
+apiRouter.post('/user/change_password', (req, res) => {
+  const { pf, current_password, new_password } = req.body || {};
+  const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!new_password || String(new_password).trim().length < 3) {
+    res.status(422).json({ ok: false, error: 'New password must be at least 3 characters long.' });
+    return;
+  }
+  const result = db.changeParticipantPassword(cleanPf, String(current_password || '').trim(), String(new_password).trim());
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json({ ok: true, message: 'Password changed successfully.' });
+});
+
 // Registration
 apiRouter.post('/register', (req, res) => {
-  const { pf, name, designation, department, unit, mobile } = req.body || {};
+  const settings = db.getSettings();
+  if (settings.registration_enabled === false) {
+    res.status(403).json({
+      ok: false,
+      error: 'New user registration is currently closed by the Administrator. If you already have an account, please log in with your PF number and password (default: 123).'
+    });
+    return;
+  }
+
+  const { pf, name, designation, department, unit, mobile, password } = req.body || {};
   const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
   const cleanName = String(name || '').trim();
   const cleanDesig = String(designation || '').trim();
   const cleanDept = String(department || '').trim();
   const cleanUnit = String(unit || '').trim();
   const cleanMobile = String(mobile || '').replace(/\D+/g, '');
+  const cleanPassword = String(password || '').trim() || '123';
 
   if (!cleanPf || !cleanName || !cleanDesig) {
     res.status(422).json({ ok: false, error: 'Please enter Name, Designation, and valid PF Number.' });
@@ -115,7 +189,8 @@ apiRouter.post('/register', (req, res) => {
     designation: cleanDesig,
     department: cleanDept,
     unit_name: cleanUnit,
-    mobile: cleanMobile
+    mobile: cleanMobile,
+    password: cleanPassword
   });
 
   db.logAudit(cleanPf, 'participant_register', `${cleanName} / ${cleanDept} / ${cleanUnit}`, getClientIp(req));
@@ -156,19 +231,7 @@ apiRouter.post('/start', (req, res) => {
       return;
     }
   } else {
-    // Check department schedule
-    const sched = db.getSchedules().find(s => s.department === participant.department);
-    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-    if (sched) {
-      if (now < sched.starts_at) {
-        res.status(403).json({ ok: false, error: `The quiz for ${participant.department} department has not opened yet.` });
-        return;
-      }
-      if (now > sched.ends_at) {
-        res.status(403).json({ ok: false, error: `The quiz window for ${participant.department} department has closed.` });
-        return;
-      }
-    }
+    // Quiz is common for all departments, so participants can take quiz smoothly without department locks
 
     // Pick questions for this department
     const bank = db.getAllQuestions(participant.department);
@@ -603,6 +666,14 @@ apiRouter.post('/admin/settings', requireAdmin, (req, res) => {
     cvo_name,
     cvo_designation,
     cvo_organization,
+    organization_name,
+    organization_email,
+    organization_address,
+    programme_name,
+    programme_period,
+    registration_enabled,
+    slogan_hindi,
+    slogan_english,
     signature_photo,
     quiz_certificate_template,
     pledge_certificate_template,
@@ -615,6 +686,14 @@ apiRouter.post('/admin/settings', requireAdmin, (req, res) => {
     ...(cvo_name !== undefined && { cvo_name: String(cvo_name).trim() }),
     ...(cvo_designation !== undefined && { cvo_designation: String(cvo_designation).trim() }),
     ...(cvo_organization !== undefined && { cvo_organization: String(cvo_organization).trim() }),
+    ...(organization_name !== undefined && { organization_name: String(organization_name).trim() }),
+    ...(organization_email !== undefined && { organization_email: String(organization_email).trim() }),
+    ...(organization_address !== undefined && { organization_address: String(organization_address).trim() }),
+    ...(programme_name !== undefined && { programme_name: String(programme_name).trim() }),
+    ...(programme_period !== undefined && { programme_period: String(programme_period).trim() }),
+    ...(registration_enabled !== undefined && { registration_enabled: Boolean(registration_enabled) }),
+    ...(slogan_hindi !== undefined && { slogan_hindi: String(slogan_hindi).trim() }),
+    ...(slogan_english !== undefined && { slogan_english: String(slogan_english).trim() }),
     ...(signature_photo !== undefined && { signature_photo }),
     ...(quiz_certificate_template !== undefined && { quiz_certificate_template }),
     ...(pledge_certificate_template !== undefined && { pledge_certificate_template }),
@@ -733,44 +812,41 @@ apiRouter.get('/live/state', (_req, res) => {
 
 // Register participant into Live Quiz
 apiRouter.post('/live/join', (req, res) => {
-  const { name, pf, designation, mobile, department, unit } = req.body || {};
+  const { name, pf, designation, mobile, department, unit, password } = req.body || {};
   const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
-  const cleanName = String(name || '').trim();
-  const cleanDesig = String(designation || '').trim();
-  const cleanMobile = String(mobile || '').replace(/\D+/g, '');
-  const cleanDept = String(department || '').trim();
 
-  if (!cleanPf || !cleanName || !cleanDesig) {
-    res.status(422).json({ ok: false, error: 'Please enter Name, Designation, and PF Number.' });
-    return;
-  }
-  if (!cleanDept) {
-    res.status(422).json({ ok: false, error: 'Please select your Department from the list.' });
-    return;
-  }
-  if (cleanMobile.length < 10) {
-    res.status(422).json({ ok: false, error: 'Please enter a valid 10-digit mobile number.' });
+  if (!cleanPf) {
+    res.status(422).json({ ok: false, error: 'Please enter your PF Number.' });
     return;
   }
 
-  const participant = liveQuiz.registerParticipant({
+  // Lookup in participant database if already registered
+  const dbParticipant = db.getParticipantByPf(cleanPf);
+  const cleanName = String(name || dbParticipant?.name || '').trim();
+  const cleanDesig = String(designation || dbParticipant?.designation || '').trim();
+  const cleanMobile = String(mobile || dbParticipant?.mobile || '9999999999').replace(/\D+/g, '');
+  const cleanDept = String(department || dbParticipant?.department || 'General').trim();
+  const cleanUnit = String(unit || dbParticipant?.unit_name || 'Chittaranjan Locomotive Works').trim();
+
+  const result = liveQuiz.requestJoinLive({
     pf: cleanPf,
+    password: password || '123',
     name: cleanName,
     designation: cleanDesig,
-    mobile: cleanMobile,
     department: cleanDept,
-    unit: unit || 'Chittaranjan Locomotive Works'
+    unit: cleanUnit,
+    mobile: cleanMobile
   });
 
-  liveQuiz.broadcast({
-    type: 'participant_joined',
-    participantCount: liveQuiz.getPublicState().participantCount,
-    leaderboard: liveQuiz.getLeaderboard().slice(0, 10)
-  });
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
 
   res.json({
     ok: true,
-    participant,
+    status: result.status, // 'admitted' | 'waiting'
+    participant: result.participant,
     state: liveQuiz.getPublicState()
   });
 });
@@ -803,8 +879,10 @@ apiRouter.get('/live/leaderboard', (_req, res) => {
 
 // Admin Live Controls
 apiRouter.post('/live/admin/start_lobby', requireAdmin, (req, res) => {
-  const { timerSeconds, questionCount, department } = req.body || {};
+  const { sessionId, title, timerSeconds, questionCount, department } = req.body || {};
   const state = liveQuiz.startLobby({
+    sessionId: sessionId ? String(sessionId) : undefined,
+    title: title ? String(title) : undefined,
     timerSeconds: timerSeconds ? Number(timerSeconds) : undefined,
     questionCount: questionCount ? Number(questionCount) : undefined,
     department: department ? String(department) : undefined
@@ -867,3 +945,202 @@ apiRouter.post('/live/admin/toggle_auto_advance', requireAdmin, (req, res) => {
 apiRouter.get('/live/admin/state', requireAdmin, (_req, res) => {
   res.json(liveQuiz.getAdminState());
 });
+
+// Live Waiting Room Controls
+apiRouter.post('/live/admin/admit', requireAdmin, (req, res) => {
+  const { pf } = req.body || {};
+  if (!pf) {
+    res.status(422).json({ ok: false, error: 'Please provide PF number to admit' });
+    return;
+  }
+  const ok = liveQuiz.admitParticipant(String(pf));
+  res.json({ ok, state: liveQuiz.getAdminState() });
+});
+
+apiRouter.post('/live/admin/admit_all', requireAdmin, (_req, res) => {
+  const count = liveQuiz.admitAllWaiting();
+  res.json({ ok: true, admittedCount: count, state: liveQuiz.getAdminState() });
+});
+
+apiRouter.post('/live/admin/toggle_auto_admit', requireAdmin, (req, res) => {
+  const { enabled } = req.body || {};
+  const current = liveQuiz.setAutoAdmit(Boolean(enabled));
+  res.json({ ok: true, autoAdmit: current, state: liveQuiz.getAdminState() });
+});
+
+// Live Quiz Sessions Management
+apiRouter.get('/live/sessions', (_req, res) => {
+  res.json({ ok: true, sessions: db.getLiveSessions() });
+});
+
+apiRouter.post('/live/admin/create_session', requireAdmin, (req, res) => {
+  const { title, scheduled_at, timer_seconds, question_count, department } = req.body || {};
+  if (!title || !scheduled_at) {
+    res.status(422).json({ ok: false, error: 'Please enter Session Title and Scheduled Date/Time.' });
+    return;
+  }
+  const session = db.createLiveSession({
+    title: String(title),
+    scheduled_at: String(scheduled_at),
+    timer_seconds: Number(timer_seconds) || 30,
+    question_count: Number(question_count) || 10,
+    department: department ? String(department) : 'All'
+  });
+  db.logAudit('admin', 'create_live_session', `Created ${session.id}: ${session.title}`);
+  res.json({ ok: true, session, sessions: db.getLiveSessions() });
+});
+
+apiRouter.get('/live/sessions/:id/history', requireAdmin, (req, res) => {
+  const session = db.getLiveSessionById(req.params.id);
+  if (!session) {
+    res.status(404).json({ ok: false, error: 'Session not found' });
+    return;
+  }
+  res.json({ ok: true, session });
+});
+
+apiRouter.get('/live/sessions/:id/participant/:pf', requireAdmin, (req, res) => {
+  const trace = db.getLiveSessionParticipantTrace(req.params.id, req.params.pf);
+  if (!trace) {
+    res.status(404).json({ ok: false, error: 'Participant attempt trace not found for this live session' });
+    return;
+  }
+  res.json({ ok: true, trace });
+});
+
+apiRouter.post('/live/admin/delete_session', requireAdmin, (req, res) => {
+  const { id } = req.body || {};
+  if (!id) {
+    res.status(422).json({ ok: false, error: 'Session ID required' });
+    return;
+  }
+  const deleted = db.deleteLiveSession(String(id));
+  res.json({ ok: deleted, sessions: db.getLiveSessions() });
+});
+
+// Admin Reset Participant Password
+apiRouter.post('/admin/reset_user_password', requireAdmin, (req, res) => {
+  const { participantId, newPassword } = req.body || {};
+  if (!participantId) {
+    res.status(422).json({ ok: false, error: 'Participant ID is required.' });
+    return;
+  }
+  const targetPass = String(newPassword || '123').trim() || '123';
+  const ok = db.resetParticipantPassword(Number(participantId), targetPass);
+  if (!ok) {
+    res.status(404).json({ ok: false, error: 'Participant not found.' });
+    return;
+  }
+  db.logAudit('admin', 'reset_user_password', `Reset password for participant ID ${participantId} to ${targetPass}`);
+  res.json({ ok: true, message: `Password reset successfully to: ${targetPass}` });
+});
+
+// Dynamic Departments Management
+apiRouter.get('/admin/departments', requireAdmin, (_req, res) => {
+  res.json({ ok: true, departments: db.getDepartments() });
+});
+
+apiRouter.post('/admin/departments', requireAdmin, (req, res) => {
+  const { action, name, newName, list } = req.body || {};
+  if (action === 'set' && Array.isArray(list)) {
+    const updated = db.setDepartments(list);
+    return res.json({ ok: true, departments: updated });
+  }
+  if (action === 'add' && name) {
+    const updated = db.addDepartment(String(name));
+    return res.json({ ok: true, departments: updated });
+  }
+  if (action === 'update' && name && newName) {
+    const updated = db.updateDepartment(String(name), String(newName));
+    return res.json({ ok: true, departments: updated });
+  }
+  if (action === 'delete' && name) {
+    const updated = db.deleteDepartment(String(name));
+    return res.json({ ok: true, departments: updated });
+  }
+  res.status(400).json({ ok: false, error: 'Invalid department action' });
+});
+
+// Dynamic Units Management
+apiRouter.get('/admin/units', requireAdmin, (_req, res) => {
+  res.json({ ok: true, units: db.getUnits() });
+});
+
+apiRouter.post('/admin/units', requireAdmin, (req, res) => {
+  const { action, name, newName, list } = req.body || {};
+  if (action === 'set' && Array.isArray(list)) {
+    const updated = db.setUnits(list);
+    return res.json({ ok: true, units: updated });
+  }
+  if (action === 'add' && name) {
+    const updated = db.addUnit(String(name));
+    return res.json({ ok: true, units: updated });
+  }
+  if (action === 'update' && name && newName) {
+    const updated = db.updateUnit(String(name), String(newName));
+    return res.json({ ok: true, units: updated });
+  }
+  if (action === 'delete' && name) {
+    const updated = db.deleteUnit(String(name));
+    return res.json({ ok: true, units: updated });
+  }
+  res.status(400).json({ ok: false, error: 'Invalid unit action' });
+});
+
+// Detailed Question-by-Question Attempt Trace
+apiRouter.get('/admin/attempt_details/:id', requireAdmin, (req, res) => {
+  const details = db.getAttemptDetails(Number(req.params.id));
+  if (!details) {
+    res.status(404).json({ ok: false, error: 'Attempt not found' });
+    return;
+  }
+  res.json({ ok: true, details });
+});
+
+apiRouter.get('/user/attempt_details/:pf', (req, res) => {
+  const p = db.getParticipantByPf(String(req.params.pf));
+  if (!p) {
+    res.status(404).json({ ok: false, error: 'Participant not found' });
+    return;
+  }
+  const attempt = db.getAttemptByParticipantId(p.id);
+  if (!attempt) {
+    res.status(404).json({ ok: false, error: 'No attempt found' });
+    return;
+  }
+  const details = db.getAttemptDetails(attempt.id);
+  res.json({ ok: true, details });
+});
+
+// Direct Database Tables Explorer for Admin
+apiRouter.get('/admin/db/:table', requireAdmin, (req, res) => {
+  const data = db.getTableData(req.params.table);
+  if (data === null) {
+    res.status(404).json({ ok: false, error: 'Table not found' });
+    return;
+  }
+  res.json({ ok: true, table: req.params.table, data });
+});
+
+apiRouter.post('/admin/db/:table/update', requireAdmin, (req, res) => {
+  const { id, updates } = req.body || {};
+  const ok = db.updateTableRow(req.params.table, id, updates);
+  if (!ok) {
+    res.status(400).json({ ok: false, error: 'Failed to update table record' });
+    return;
+  }
+  db.logAudit('admin', 'db_update', `Updated ${req.params.table} ID ${id}`);
+  res.json({ ok: true, message: 'Record updated successfully.' });
+});
+
+apiRouter.post('/admin/db/:table/delete', requireAdmin, (req, res) => {
+  const { id } = req.body || {};
+  const ok = db.deleteTableRow(req.params.table, id);
+  if (!ok) {
+    res.status(400).json({ ok: false, error: 'Failed to delete table record' });
+    return;
+  }
+  db.logAudit('admin', 'db_delete', `Deleted from ${req.params.table} ID ${id}`);
+  res.json({ ok: true, message: 'Record deleted successfully.' });
+});
+

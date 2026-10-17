@@ -1,5 +1,67 @@
 // Client API service for CLW VAW 2026 Quiz Portal
 
+export interface LiveSessionData {
+  id: string;
+  title: string;
+  scheduled_at: string;
+  timer_seconds: number;
+  question_count: number;
+  department?: string;
+  status: 'scheduled' | 'lobby' | 'in_progress' | 'completed';
+  created_at: string;
+  completed_at?: string;
+  participants_count?: number;
+  history?: {
+    ended_at: string;
+    questions?: Array<{
+      id: number;
+      index: number;
+      question: string;
+      department?: string;
+      options: string[];
+      correct_index: number;
+    }>;
+    leaderboard: any[];
+    participant_answers: Record<string, any>;
+  };
+}
+
+export interface AttemptDetailData {
+  attempt: {
+    id: number;
+    status: string;
+    started_at: string;
+    submitted_at: string | null;
+    score: number | null;
+    max_score: number;
+    duration_seconds?: number;
+    rank?: number;
+  };
+  participant: {
+    id: number;
+    pf_no: string;
+    name: string;
+    designation: string;
+    department: string;
+    unit_name: string;
+    mobile: string;
+  };
+  questions: {
+    question_index: number;
+    question_id: number;
+    question_text: string;
+    department: string;
+    options: string[];
+    selected_option_index: number;
+    selected_option_text: string;
+    correct_option_index: number;
+    correct_option_text: string;
+    is_correct: boolean;
+    is_skipped: boolean;
+    points_awarded: number;
+  }[];
+}
+
 export interface PublicHomeData {
   ok: boolean;
   departments: string[];
@@ -11,10 +73,17 @@ export interface PublicHomeData {
     ends_at: string;
     updated_at: string;
   }[];
+  live_sessions?: LiveSessionData[];
   settings: {
     cvo_name: string;
     cvo_designation: string;
     cvo_organization: string;
+    organization_name?: string;
+    organization_email?: string;
+    organization_address?: string;
+    programme_name?: string;
+    programme_period?: string;
+    registration_enabled?: boolean;
     seal_text: string;
     logo_url: string;
     has_signature: boolean;
@@ -37,6 +106,7 @@ export interface ParticipantData {
   designation: string;
   department: string;
   unit: string;
+  password?: string;
 }
 
 export interface QuizQuestionData {
@@ -97,6 +167,12 @@ export interface AdminSettingsData {
   cvo_name: string;
   cvo_designation: string;
   cvo_organization: string;
+  organization_name?: string;
+  organization_email?: string;
+  organization_address?: string;
+  programme_name?: string;
+  programme_period?: string;
+  registration_enabled?: boolean;
   signature_photo: string | null;
   quiz_certificate_template?: string | null;
   pledge_certificate_template?: string | null;
@@ -230,6 +306,7 @@ class ApiService {
     department: string;
     unit: string;
     mobile: string;
+    password?: string;
   }) {
     return this.request<{
       ok: boolean;
@@ -435,14 +512,18 @@ class ApiService {
 
   public async joinLiveQuiz(payload: {
     pf: string;
-    name: string;
-    designation: string;
-    mobile: string;
-    department: string;
+    password?: string;
+    name?: string;
+    designation?: string;
+    mobile?: string;
+    department?: string;
     unit?: string;
   }) {
     return this.request<{
       ok: boolean;
+      status: 'admitted' | 'waiting';
+      message?: string;
+      error?: string;
       participant: any;
       state: LiveQuizPublicState;
     }>('/live/join', {
@@ -532,6 +613,162 @@ class ApiService {
   public async adminGetLiveState() {
     return this.request<any>('/live/admin/state', {
       method: 'GET'
+    });
+  }
+
+  // User Login & Password
+  public async userLogin(pf: string, password?: string) {
+    return this.request<{
+      ok: boolean;
+      participant: ParticipantData;
+      attempt: {
+        id: number;
+        status: string;
+        score: number | null;
+        max: number;
+        rank?: number;
+        duration_seconds?: number;
+        submitted_at: string | null;
+      } | null;
+      error?: string;
+    }>('/user/login', {
+      method: 'POST',
+      body: JSON.stringify({ pf, password })
+    });
+  }
+
+  public async changeUserPassword(pf: string, current_password: string, new_password: string) {
+    return this.request<{ ok: boolean; message?: string; error?: string }>('/user/change_password', {
+      method: 'POST',
+      body: JSON.stringify({ pf, current_password, new_password })
+    });
+  }
+
+  public async adminResetUserPassword(participantId: number, newPassword?: string) {
+    return this.request<{ ok: boolean; message: string }>('/admin/reset_user_password', {
+      method: 'POST',
+      body: JSON.stringify({ participantId, newPassword })
+    });
+  }
+
+  // Attempt question-by-question trace
+  public async adminGetAttemptDetails(attemptId: number) {
+    return this.request<{ ok: boolean; details: AttemptDetailData }>('/admin/attempt_details/' + attemptId, {
+      method: 'GET'
+    });
+  }
+
+  public async userGetAttemptDetails(pf: string) {
+    return this.request<{ ok: boolean; details: AttemptDetailData }>('/user/attempt_details/' + encodeURIComponent(pf), {
+      method: 'GET'
+    });
+  }
+
+  // Dynamic Departments & Units
+  public async adminGetDepartments() {
+    return this.request<{ ok: boolean; departments: string[] }>('/admin/departments', {
+      method: 'GET'
+    });
+  }
+
+  public async adminUpdateDepartments(payload: { action: 'add' | 'update' | 'delete' | 'set'; name?: string; newName?: string; list?: string[] }) {
+    return this.request<{ ok: boolean; departments: string[] }>('/admin/departments', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  public async adminGetUnits() {
+    return this.request<{ ok: boolean; units: string[] }>('/admin/units', {
+      method: 'GET'
+    });
+  }
+
+  public async adminUpdateUnits(payload: { action: 'add' | 'update' | 'delete' | 'set'; name?: string; newName?: string; list?: string[] }) {
+    return this.request<{ ok: boolean; units: string[] }>('/admin/units', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // Live Quiz Waiting Room Controls
+  public async adminAdmitLiveParticipant(pf: string) {
+    return this.request<{ ok: boolean; state: any }>('/live/admin/admit', {
+      method: 'POST',
+      body: JSON.stringify({ pf })
+    });
+  }
+
+  public async adminAdmitAllLive() {
+    return this.request<{ ok: boolean; admittedCount: number; state: any }>('/live/admin/admit_all', {
+      method: 'POST'
+    });
+  }
+
+  public async adminToggleAutoAdmit(enabled: boolean) {
+    return this.request<{ ok: boolean; autoAdmit: boolean; state: any }>('/live/admin/toggle_auto_admit', {
+      method: 'POST',
+      body: JSON.stringify({ enabled })
+    });
+  }
+
+  // Live Sessions Management
+  public async getLiveSessions() {
+    return this.request<{ ok: boolean; sessions: LiveSessionData[] }>('/live/sessions', {
+      method: 'GET'
+    });
+  }
+
+  public async adminCreateLiveSession(data: {
+    title: string;
+    scheduled_at: string;
+    timer_seconds: number;
+    question_count: number;
+    department?: string;
+  }) {
+    return this.request<{ ok: boolean; session: LiveSessionData; sessions: LiveSessionData[] }>('/live/admin/create_session', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public async adminGetLiveSessionHistory(id: string) {
+    return this.request<{ ok: boolean; session: LiveSessionData }>('/live/sessions/' + encodeURIComponent(id) + '/history', {
+      method: 'GET'
+    });
+  }
+
+  public async adminGetLiveSessionParticipantTrace(sessionId: string, pf: string) {
+    return this.request<{ ok: boolean; trace: any }>(`/live/sessions/${encodeURIComponent(sessionId)}/participant/${encodeURIComponent(pf)}`, {
+      method: 'GET'
+    });
+  }
+
+  public async adminDeleteLiveSession(id: string) {
+    return this.request<{ ok: boolean; sessions: LiveSessionData[] }>('/live/admin/delete_session', {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    });
+  }
+
+  // Database Table Explorer for Admin
+  public async adminGetDbTable(table: string) {
+    return this.request<{ ok: boolean; table: string; data: any }>('/admin/db/' + encodeURIComponent(table), {
+      method: 'GET'
+    });
+  }
+
+  public async adminUpdateDbTableRow(table: string, id: any, updates: any) {
+    return this.request<{ ok: boolean; message: string }>('/admin/db/' + encodeURIComponent(table) + '/update', {
+      method: 'POST',
+      body: JSON.stringify({ id, updates })
+    });
+  }
+
+  public async adminDeleteDbTableRow(table: string, id: any) {
+    return this.request<{ ok: boolean; message: string }>('/admin/db/' + encodeURIComponent(table) + '/delete', {
+      method: 'POST',
+      body: JSON.stringify({ id })
     });
   }
 }

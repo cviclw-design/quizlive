@@ -62,7 +62,11 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
     }
   });
 
-  // Registration Form fields
+  // Registration / Login Form fields
+  const [admissionStatus, setAdmissionStatus] = useState<'admitted' | 'waiting'>('admitted');
+  const [isLoginMode, setIsLoginMode] = useState(false);
+  const [loginPf, setLoginPf] = useState('');
+  const [loginPassword, setLoginPassword] = useState('123');
   const [regName, setRegName] = useState(participant?.name || '');
   const [regPf, setRegPf] = useState(participant?.pf || '');
   const [regDesig, setRegDesig] = useState(participant?.designation || '');
@@ -204,6 +208,12 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
           setLastSubmissionResult(msg.result);
         }
         break;
+      case 'participant_admitted':
+        if (participant && (String(msg.pf).toUpperCase() === participant.pf.toUpperCase() || String(msg.participant?.pf).toUpperCase() === participant.pf.toUpperCase())) {
+          setAdmissionStatus('admitted');
+          fetchState(false);
+        }
+        break;
     }
   };
 
@@ -228,6 +238,12 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
       const res = await api.getLiveState();
       if (res && res.ok) {
         setLiveState(res);
+        if (participant && res.leaderboard) {
+          const isAdmitted = res.leaderboard.some((p: any) => p.pf?.toUpperCase() === participant.pf.toUpperCase());
+          if (isAdmitted) {
+            setAdmissionStatus('admitted');
+          }
+        }
       }
     } catch (err: any) {
       console.error('Failed to fetch live state', err);
@@ -293,54 +309,90 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
     }
   }, [liveState?.status]);
 
-  // Submit registration form
+  // Submit registration or login form
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
 
-    if (!regName.trim() || !regPf.trim() || !regDesig.trim()) {
-      setRegError('Please fill in Name, PF No, and Designation.');
-      return;
-    }
-    if (!regDept) {
-      setRegError('Please select your Department from the list.');
-      return;
-    }
-    if (regMobile.replace(/\D/g, '').length < 10) {
-      setRegError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-
     setSubmittingReg(true);
     try {
       soundEffects.playClick();
-      const payload = {
-        name: regName.trim(),
-        pf: regPf.trim().toUpperCase(),
-        designation: regDesig.trim(),
-        mobile: regMobile.trim(),
-        department: regDept,
-        unit: 'Chittaranjan Locomotive Works'
+      let payload: {
+        pf: string;
+        password?: string;
+        name?: string;
+        designation?: string;
+        mobile?: string;
+        department?: string;
+        unit?: string;
       };
+
+      if (isLoginMode) {
+        if (!loginPf.trim()) {
+          setRegError('Please enter your PF Number.');
+          setSubmittingReg(false);
+          return;
+        }
+        payload = {
+          pf: loginPf.trim().toUpperCase(),
+          password: loginPassword.trim() || '123'
+        };
+      } else {
+        if (!regName.trim() || !regPf.trim() || !regDesig.trim()) {
+          setRegError('Please fill in Name, PF No, and Designation.');
+          setSubmittingReg(false);
+          return;
+        }
+        if (!regDept) {
+          setRegError('Please select your Department from the list.');
+          setSubmittingReg(false);
+          return;
+        }
+        if (regMobile.replace(/\D/g, '').length < 10) {
+          setRegError('Please enter a valid 10-digit mobile number.');
+          setSubmittingReg(false);
+          return;
+        }
+        payload = {
+          name: regName.trim(),
+          pf: regPf.trim().toUpperCase(),
+          designation: regDesig.trim(),
+          mobile: regMobile.trim(),
+          department: regDept,
+          unit: 'Chittaranjan Locomotive Works',
+          password: '123'
+        };
+      }
 
       const res = await api.joinLiveQuiz(payload);
       if (res.ok) {
-        setParticipant(payload);
+        const participantData = res.participant || {
+          pf: payload.pf,
+          name: payload.name || payload.pf,
+          designation: payload.designation || 'Staff',
+          department: payload.department || 'CLW',
+          mobile: payload.mobile || ''
+        };
+        setParticipant(participantData);
+        setAdmissionStatus(res.status === 'waiting' ? 'waiting' : 'admitted');
+
         try {
-          localStorage.setItem('clw_live_participant', JSON.stringify(payload));
+          localStorage.setItem('clw_live_participant', JSON.stringify(participantData));
         } catch {}
 
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
           wsRef.current.send(JSON.stringify({
             type: 'join',
-            payload
+            payload: participantData
           }));
         }
 
         fetchState(false);
+      } else {
+        setRegError(res.message || 'Failed to enter live quiz.');
       }
     } catch (err: any) {
-      setRegError(err?.message || 'Failed to register into live quiz.');
+      setRegError(err?.message || 'Failed to enter live quiz.');
     } finally {
       setSubmittingReg(false);
     }
@@ -547,7 +599,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
       {/* Main Container */}
       <main className="max-w-6xl w-full mx-auto flex-1 flex flex-col py-6">
 
-        {/* 1. REGISTRATION VIEW (If participant not registered yet) */}
+        {/* 1. REGISTRATION OR LOGIN VIEW (If participant not registered yet) */}
         {!participant ? (
           <div className="max-w-xl w-full mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
             <div className="text-center mb-6">
@@ -558,8 +610,36 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                 Join Online Live Quiz
               </h2>
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                Enter your official details to participate. Speed and accuracy both award ranking marks!
+                Enter with your official PF Number. Speed and accuracy both award ranking marks!
               </p>
+
+              {/* Mode Toggle Pills: Login vs Register */}
+              <div className="mt-4 inline-flex p-1 bg-slate-800 rounded-xl border border-slate-700 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoginMode(true);
+                    setRegError('');
+                  }}
+                  className={`px-4 py-1.5 rounded-lg font-bold transition-all ${
+                    isLoginMode ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Quick Log In (PF &amp; Password)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoginMode(false);
+                    setRegError('');
+                  }}
+                  className={`px-4 py-1.5 rounded-lg font-bold transition-all ${
+                    !isLoginMode ? 'bg-amber-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  New Participant Entry
+                </button>
+              </div>
             </div>
 
             {regError && (
@@ -570,85 +650,122 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
             )}
 
             <form onSubmit={handleRegister} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ramesh Kumar"
-                  value={regName}
-                  onChange={e => setRegName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+              {isLoginMode ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                      PF / Employee No. *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 11002345"
+                      value={loginPf}
+                      onChange={e => setLoginPf(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase font-mono"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    PF / Employee No. *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 11002345"
-                    value={regPf}
-                    onChange={e => setRegPf(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase font-mono"
-                  />
-                </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                      Password (Default: 123) *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Enter password (default: 123)"
+                      value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Registered employees log in with PF and default password <code className="text-amber-400 font-bold">123</code>.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                      Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Ramesh Kumar"
+                      value={regName}
+                      onChange={e => setRegName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Designation *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Senior Section Engineer"
-                    value={regDesig}
-                    onChange={e => setRegDesig(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        PF / Employee No. *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 11002345"
+                        value={regPf}
+                        onChange={e => setRegPf(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase font-mono"
+                      />
+                    </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Department *
-                  </label>
-                  <select
-                    required
-                    value={regDept}
-                    onChange={e => setRegDept(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  >
-                    <option value="">-- Select Department --</option>
-                    {departmentsList.map(dept => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Designation *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Senior Section Engineer"
+                        value={regDesig}
+                        onChange={e => setRegDesig(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                    Mobile Number (10 digits) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    maxLength={10}
-                    placeholder="e.g. 9876543210"
-                    value={regMobile}
-                    onChange={e => setRegMobile(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Department *
+                      </label>
+                      <select
+                        required
+                        value={regDept}
+                        onChange={e => setRegDept(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      >
+                        <option value="">-- Select Department --</option>
+                        {departmentsList.map((dept, idx) => (
+                          <option key={`live-dept-${dept}-${idx}`} value={dept}>
+                            {dept}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Mobile Number (10 digits) *
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        placeholder="e.g. 9876543210"
+                        value={regMobile}
+                        onChange={e => setRegMobile(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="pt-2">
                 <button
@@ -659,17 +776,54 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                   {submittingReg ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Joining Live Quiz...</span>
+                      <span>{isLoginMode ? 'Verifying Credentials...' : 'Joining Live Quiz...'}</span>
                     </>
                   ) : (
                     <>
-                      <span>Enter Live Quiz Room</span>
+                      <span>{isLoginMode ? 'Log In & Enter Live Quiz' : 'Enter Live Quiz Room'}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        ) : admissionStatus === 'waiting' ? (
+          /* WAITING ROOM VIEW (Waiting for Admin Admission) */
+          <div className="max-w-xl w-full mx-auto my-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-6 shadow-2xl">
+            <div className="w-20 h-20 rounded-full bg-amber-500/15 border-2 border-amber-400 text-amber-400 mx-auto flex items-center justify-center animate-pulse">
+              <Clock className="w-10 h-10" />
+            </div>
+
+            <div>
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
+                Live Quiz Waiting Room
+              </span>
+              <h2 className="text-2xl font-serif font-bold text-white mt-3">
+                Waiting for Quiz Admin to Admit You
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+                Welcome, <strong>{participant.name}</strong> (PF: {participant.pf})! You are in the waiting queue. The Admin can admit you at any moment, even after the live quiz has started.
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-slate-400 flex items-center justify-center gap-2">
+              <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+              <span>Checking admission status with server... (Auto-updates when approved)</span>
+            </div>
+
+            <button
+              onClick={() => {
+                setParticipant(null);
+                setAdmissionStatus('admitted');
+                try {
+                  localStorage.removeItem('clw_live_participant');
+                } catch {}
+              }}
+              className="text-xs text-slate-500 hover:text-slate-300 underline cursor-pointer"
+            >
+              Change PF / Registration Details
+            </button>
           </div>
         ) : (
 
