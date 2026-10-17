@@ -1345,8 +1345,7 @@ export default function App() {
           <div className="flex items-center justify-center gap-3 text-slate-600 font-medium">
             <span>SDGM &amp; CVO: {cvoName}</span>
             <span>·</span>
-            <span>dycvo@clw.railnet.gov.in</span>
-            <span>·</span>
+                    
             <button
               onClick={() => navigateTo('admin')}
               className="text-blue-900 font-bold hover:underline"

@@ -1254,7 +1254,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
 
       {/* Footer */}
       <footer className="max-w-6xl w-full mx-auto pt-4 border-t border-slate-800 text-center text-xs text-slate-500">
-        Vigilance Awareness Week 2026 · Chittaranjan Locomotive Works · Official Central Vigilance Commission Portal
+        Devloped by C. P. Chauhan, CVI
       </footer>
 
     </div>
