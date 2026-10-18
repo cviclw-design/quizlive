@@ -3,7 +3,8 @@ import { api, QuizQuestionData, CertificateData, ParticipantData } from '../serv
 import { soundEffects } from '../utils/audio';
 import { ClwCertificateView } from './ClwCertificateView';
 import confetti from 'canvas-confetti';
-import { AlertCircle, ArrowLeft, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface ClwQuizViewProps {
   participant: ParticipantData;
@@ -27,6 +28,7 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [certificate, setCertificate] = useState<CertificateData | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
 
   const currentQ = questions[currentIndex];
   const maxSeconds = initialSeconds || 45;
@@ -69,6 +71,8 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
     }
 
     const valueToSave = mode === 'skip' ? 'skip' : (mode === 'answer' ? (selectedOption ?? '') : '');
+
+    setAnswers(prev => ({ ...prev, [String(currentQ.id)]: valueToSave }));
 
     try {
       soundEffects.playClick();
@@ -174,50 +178,72 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
           </div>
         </div>
 
-        {/* Progress Bar */}
-        <div className="w-full bg-[#efe6d6] h-2 rounded-full overflow-hidden my-5">
-          <div
-            className="h-full bg-gradient-to-r from-[#ff8a1e] to-[#128a45] transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
+        {/* Answered Questions Progress Bar */}
+        <div className="my-5 p-3.5 bg-amber-50/60 border border-amber-200/80 rounded-xl">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-1.5">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Questions Answered: {Object.keys(answers).filter(k => answers[k] && answers[k] !== 'skip').length} of {questions.length}</span>
+            </span>
+            <span className="font-mono text-emerald-700 font-extrabold">
+              {Math.round((Object.keys(answers).filter(k => answers[k] && answers[k] !== 'skip').length / (questions.length || 1)) * 100)}% Answered
+            </span>
+          </div>
+          <div className="w-full bg-[#efe6d6] h-2.5 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-emerald-600 transition-all duration-300"
+              style={{ width: `${(Object.keys(answers).filter(k => answers[k] && answers[k] !== 'skip').length / (questions.length || 1)) * 100}%` }}
+            />
+          </div>
         </div>
 
-        {/* Question Statement */}
-        <div className="my-6">
-          <h2 className="text-lg sm:text-2xl font-serif font-bold text-[#071a3a] leading-snug">
-            {currentQ.question}
-          </h2>
-        </div>
+        {/* Animated Question & Options */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentQ.id}
+            initial={{ opacity: 0, x: 25 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -25 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+          >
+            {/* Question Statement */}
+            <div className="my-6">
+              <h2 className="text-lg sm:text-2xl font-serif font-bold text-[#071a3a] leading-snug">
+                {currentQ.question}
+              </h2>
+            </div>
 
-        {/* 4 Options */}
-        <div className="space-y-3 mb-6">
-          {currentQ.options.map((optionText, idx) => {
-            const isSelected = selectedOption === String(idx);
-            return (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelect(idx)}
-                className={`w-full p-4 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-3.5 cursor-pointer ${
-                  isSelected
-                    ? 'border-[#128a45] bg-[#eefbf3] text-[#071a3a] shadow-xs font-semibold ring-2 ring-[#128a45]/30'
-                    : 'border-[#eadcc4] bg-white text-slate-800 hover:border-[#d4a017] hover:bg-[#fffdf8]'
-                }`}
-              >
-                <span
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 mt-0.5 ${
-                    isSelected ? 'bg-[#128a45] text-white' : 'bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  {String.fromCharCode(65 + idx)}
-                </span>
-                <span className="flex-1 leading-snug mt-1">
-                  {optionText}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+            {/* 4 Options */}
+            <div className="space-y-3 mb-6">
+              {currentQ.options.map((optionText, idx) => {
+                const isSelected = selectedOption === String(idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSelect(idx)}
+                    className={`w-full p-4 rounded-xl border text-left text-xs sm:text-sm transition-all flex items-start gap-3.5 cursor-pointer ${
+                      isSelected
+                        ? 'border-[#128a45] bg-[#eefbf3] text-[#071a3a] shadow-xs font-semibold ring-2 ring-[#128a45]/30'
+                        : 'border-[#eadcc4] bg-white text-slate-800 hover:border-[#d4a017] hover:bg-[#fffdf8]'
+                    }`}
+                  >
+                    <span
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono font-bold text-xs shrink-0 mt-0.5 ${
+                        isSelected ? 'bg-[#128a45] text-white' : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </span>
+                    <span className="flex-1 leading-snug mt-1">
+                      {optionText}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        </AnimatePresence>
 
         {errorMessage && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg flex items-center gap-2">

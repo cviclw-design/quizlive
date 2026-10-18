@@ -68,7 +68,10 @@ apiRouter.get('/home', (_req, res) => {
       quiz_seconds: settings.quiz_seconds,
       quiz_count: settings.quiz_count,
       slogan_hindi: settings.slogan_hindi || 'सत्यनिष्ठा से समृद्धि',
-      slogan_english: settings.slogan_english || 'Probity for Prosperity'
+      slogan_english: settings.slogan_english || 'Probity for Prosperity',
+      contact_address: settings.contact_address || 'Vigilance Department, Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal',
+      contact_email: settings.contact_email || 'cviclw@gmail.com',
+      contact_phone: settings.contact_phone || '0341-2525555 / Rly: 22000'
     }
   });
 });
@@ -679,16 +682,23 @@ apiRouter.post('/admin/settings', requireAdmin, (req, res) => {
     pledge_certificate_template,
     seal_text,
     quiz_seconds,
-    quiz_count
+    quiz_count,
+    contact_address,
+    contact_email,
+    contact_phone
   } = req.body || {};
+
+  const addr = contact_address !== undefined ? contact_address : organization_address;
+  const em = contact_email !== undefined ? contact_email : organization_email;
 
   const updated = db.updateSettings({
     ...(cvo_name !== undefined && { cvo_name: String(cvo_name).trim() }),
     ...(cvo_designation !== undefined && { cvo_designation: String(cvo_designation).trim() }),
     ...(cvo_organization !== undefined && { cvo_organization: String(cvo_organization).trim() }),
     ...(organization_name !== undefined && { organization_name: String(organization_name).trim() }),
-    ...(organization_email !== undefined && { organization_email: String(organization_email).trim() }),
-    ...(organization_address !== undefined && { organization_address: String(organization_address).trim() }),
+    ...(addr !== undefined && { contact_address: String(addr).trim() }),
+    ...(em !== undefined && { contact_email: String(em).trim() }),
+    ...(contact_phone !== undefined && { contact_phone: String(contact_phone).trim() }),
     ...(programme_name !== undefined && { programme_name: String(programme_name).trim() }),
     ...(programme_period !== undefined && { programme_period: String(programme_period).trim() }),
     ...(registration_enabled !== undefined && { registration_enabled: Boolean(registration_enabled) }),
@@ -822,9 +832,25 @@ apiRouter.post('/live/join', (req, res) => {
 
   // Lookup in participant database if already registered
   const dbParticipant = db.getParticipantByPf(cleanPf);
+  if (dbParticipant && name && name.trim().toLowerCase() !== dbParticipant.name.trim().toLowerCase()) {
+    res.status(409).json({
+      ok: false,
+      error: `PF Number is unique and already assigned to another participant (${dbParticipant.name}). Duplicate PF numbers are strictly not allowed.`
+    });
+    return;
+  }
+
+  const cleanMobile = String(mobile || dbParticipant?.mobile || '').replace(/\D+/g, '');
+  if (!cleanMobile || cleanMobile.length !== 10) {
+    res.status(422).json({
+      ok: false,
+      error: 'Mobile number must not be more than 10 digits (exactly 10 digits required).'
+    });
+    return;
+  }
+
   const cleanName = String(name || dbParticipant?.name || '').trim();
   const cleanDesig = String(designation || dbParticipant?.designation || '').trim();
-  const cleanMobile = String(mobile || dbParticipant?.mobile || '9999999999').replace(/\D+/g, '');
   const cleanDept = String(department || dbParticipant?.department || 'General').trim();
   const cleanUnit = String(unit || dbParticipant?.unit_name || 'Chittaranjan Locomotive Works').trim();
 
@@ -1006,6 +1032,57 @@ apiRouter.get('/live/sessions/:id/participant/:pf', requireAdmin, (req, res) => 
     return;
   }
   res.json({ ok: true, trace });
+});
+
+// Full Session Backup Data Export (Participants, Answers, Certificates)
+apiRouter.get('/live/sessions/:id/backup', requireAdmin, (req, res) => {
+  const backup = db.getLiveSessionBackup(req.params.id);
+  if (!backup) {
+    res.status(404).json({ ok: false, error: 'Session not found for backup export' });
+    return;
+  }
+  res.json({ ok: true, backup });
+});
+
+// Live Participant Certificate lookup by PF
+apiRouter.get('/live/certificate/:pf', (req, res) => {
+  const cleanPf = String(req.params.pf || '').trim().toUpperCase();
+  const sessions = db.getLiveSessions();
+  for (const s of sessions) {
+    const cert = (s.history as any)?.certificates?.find((c: any) => c.pf_no === cleanPf);
+    if (cert) {
+      return res.json({ ok: true, certificate: cert, sessionTitle: s.title });
+    }
+  }
+
+  // Fallback to participant attempts
+  const participant = db.getParticipantByPf(cleanPf);
+  if (!participant) {
+    return res.status(404).json({ ok: false, error: 'No certificate found for this PF number.' });
+  }
+  const attempt = db.getAttemptByParticipantId(participant.id);
+  if (!attempt || attempt.status !== 'submitted') {
+    return res.status(404).json({ ok: false, error: 'No completed quiz attempt found for this PF.' });
+  }
+
+  const settings = db.getSettings();
+  res.json({
+    ok: true,
+    certificate: {
+      certificate_no: `CLW/VAW2026/LIVE/${participant.pf_no}`,
+      name: participant.name,
+      designation: participant.designation,
+      department: participant.department,
+      unit: participant.unit_name,
+      score: attempt.score,
+      max_score: attempt.max_score,
+      rank: attempt.rank,
+      date: attempt.submitted_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      cvo_name: settings.cvo_name,
+      cvo_designation: settings.cvo_designation,
+      organization: settings.organization_name
+    }
+  });
 });
 
 apiRouter.post('/live/admin/delete_session', requireAdmin, (req, res) => {

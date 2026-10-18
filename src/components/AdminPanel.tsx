@@ -338,6 +338,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
     }
   };
 
+  const handleDownloadSessionBackup = async (id: string) => {
+    try {
+      soundEffects.playClick();
+      const res = await api.adminGetLiveSessionBackup(id);
+      if (res.ok && res.backup) {
+        const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(res.backup, null, 2));
+        const a = document.createElement('a');
+        a.setAttribute('href', dataStr);
+        a.setAttribute('download', `${id}_backup_full.json`);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        soundEffects.playCorrect();
+      } else {
+        alert('No backup data found for this session.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to download session backup');
+    }
+  };
+
   const handleAdmitParticipant = async (pf: string) => {
     try {
       soundEffects.playClick();
@@ -930,6 +951,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
         seal_text: settings.seal_text,
         quiz_seconds: Number(settings.quiz_seconds),
         quiz_count: Number(settings.quiz_count),
+        contact_address: settings.contact_address,
+        contact_email: settings.contact_email,
+        contact_phone: settings.contact_phone,
         slogan_hindi: settings.slogan_hindi,
         slogan_english: settings.slogan_english
       });
@@ -1423,7 +1447,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
             <h3 className="text-sm font-bold text-slate-900 mb-3">
               Administrator Shortcuts
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
               <button
                 onClick={() => {
                   handleTabChange('questions');
@@ -1436,6 +1460,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                   <div className="text-[11px] text-slate-600">Add question &amp; options</div>
                 </div>
                 <Plus className="w-5 h-5 text-blue-800" />
+              </button>
+
+              <button
+                onClick={() => {
+                  soundEffects.playClick();
+                  handleTabChange('dept_units');
+                }}
+                className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 text-left transition-colors flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-bold text-xs text-indigo-950 mb-0.5">+ Dept &amp; Unit</div>
+                  <div className="text-[11px] text-slate-600">Add &amp; manage master</div>
+                </div>
+                <Building className="w-5 h-5 text-indigo-800" />
               </button>
 
               <button
@@ -2212,6 +2250,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
 
                             <button
                               type="button"
+                              onClick={() => handleDownloadSessionBackup(sess.id)}
+                              className="px-2.5 py-1 bg-indigo-900 hover:bg-indigo-800 text-white font-semibold rounded text-[11px] inline-flex items-center gap-1"
+                              title="Download Full Backup (JSON) with all participants, answers & certificates"
+                            >
+                              <HardDrive className="w-3 h-3" />
+                              <span>Backup JSON</span>
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => handleDeleteLiveSession(sess.id)}
                               className="p-1 text-rose-600 hover:bg-rose-50 rounded"
                               title="Delete Session"
@@ -2250,18 +2298,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 className="px-3 py-1.5 text-xs font-medium border border-slate-300 rounded-lg bg-white focus:outline-none"
               >
                 <option value="All">All Departments</option>
-                <option value="Personnel">Personnel</option>
-                <option value="Accounts">Accounts</option>
-                <option value="Stores">Stores</option>
-                <option value="Electrical">Electrical</option>
-                <option value="Mechanical">Mechanical</option>
-                <option value="Security (RPF)">Security (RPF)</option>
-                <option value="Signal &amp; Telecom">Signal &amp; Telecom</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Civil Engineering">Civil Engineering</option>
-                <option value="Medical">Medical</option>
-                <option value="General Administration">General Administration</option>
-                <option value="Rajbhasha">Rajbhasha</option>
+                {departments.map((dept, idx) => (
+                  <option key={`filter-dept-${dept}-${idx}`} value={dept}>{dept}</option>
+                ))}
               </select>
 
               {/* Search */}
@@ -2323,17 +2362,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                       className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
                     >
                       <option value="All">All Departments (General)</option>
-                      <option value="Personnel">Personnel</option>
-                      <option value="Accounts">Accounts</option>
-                      <option value="Stores">Stores</option>
-                      <option value="Electrical">Electrical</option>
-                      <option value="Mechanical">Mechanical</option>
-                      <option value="Security (RPF)">Security (RPF)</option>
-                      <option value="Signal &amp; Telecom">Signal &amp; Telecom</option>
-                      <option value="Civil Engineering">Civil Engineering</option>
-                      <option value="Medical">Medical</option>
-                      <option value="General Administration">General Administration</option>
-                      <option value="Rajbhasha">Rajbhasha</option>
+                      {departments.map((dept, idx) => (
+                        <option key={`form-dept-${dept}-${idx}`} value={dept}>{dept}</option>
+                      ))}
                     </select>
                   </div>
 
@@ -2959,6 +2990,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                     required
                     value={settings.cvo_organization}
                     onChange={e => setSettings({ ...settings, cvo_organization: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                  />
+                </div>
+              </div>
+
+              {/* Office Address & Home Screen Bottom Plate Details */}
+              <div className="pt-3 border-t border-slate-200 space-y-3">
+                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>Home Screen Bottom Plate &amp; Official Contact Information</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Office / Department Address (Shown in Bottom Plate)
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.contact_address || ''}
+                      onChange={e => setSettings({ ...settings, contact_address: e.target.value })}
+                      placeholder="e.g. Vigilance Department, Administrative Building, Chittaranjan..."
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Official Contact Email
+                    </label>
+                    <input
+                      type="email"
+                      value={settings.contact_email || ''}
+                      onChange={e => setSettings({ ...settings, contact_email: e.target.value })}
+                      placeholder="e.g. cviclw@gmail.com"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Official Contact / Helpline Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.contact_phone || ''}
+                    onChange={e => setSettings({ ...settings, contact_phone: e.target.value })}
+                    placeholder="e.g. 0341-2525555 / Rly: 22000"
                     className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900"
                   />
                 </div>

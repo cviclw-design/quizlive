@@ -83,6 +83,8 @@ export interface LiveSessionRecord {
     ended_at: string;
     leaderboard: any[];
     participant_answers: Record<string, any>;
+    questions?: any[];
+    certificates?: any[];
   };
 }
 
@@ -102,6 +104,9 @@ export interface SystemSettings {
   quiz_seconds: number;
   quiz_count: number;
   enforce_schedule: boolean;
+  contact_address?: string;
+  contact_email?: string;
+  contact_phone?: string;
   slogan_hindi?: string;
   slogan_english?: string;
   updated_at: string;
@@ -399,6 +404,37 @@ class Database {
         if (parsed.settings.registration_enabled === undefined) {
           parsed.settings.registration_enabled = true;
         }
+        if (!parsed.admins || !Array.isArray(parsed.admins) || parsed.admins.length === 0) {
+          parsed.admins = [{
+            id: 1,
+            username: 'admin',
+            password_hash: 'ClwVaw@2026',
+            display_name: 'Sugind Surendran',
+            must_change: false,
+            created_at: '2026-10-14 07:31:45'
+          }];
+        }
+        if (!parsed.participants || !Array.isArray(parsed.participants)) {
+          parsed.participants = [];
+        }
+        if (!parsed.attempts || !Array.isArray(parsed.attempts)) {
+          parsed.attempts = [];
+        }
+        if (!parsed.schedules || !Array.isArray(parsed.schedules)) {
+          parsed.schedules = [];
+        }
+        if (!parsed.audit_log || !Array.isArray(parsed.audit_log)) {
+          parsed.audit_log = [];
+        }
+        if (!parsed.settings.contact_address) {
+          parsed.settings.contact_address = 'Vigilance Department, Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal';
+        }
+        if (!parsed.settings.contact_email) {
+          parsed.settings.contact_email = 'cviclw@gmail.com';
+        }
+        if (!parsed.settings.contact_phone) {
+          parsed.settings.contact_phone = '0341-2525555 / Rly: 22000';
+        }
         // Ensure all participants have password default '123'
         if (Array.isArray(parsed.participants)) {
           parsed.participants.forEach(p => {
@@ -469,6 +505,9 @@ class Database {
         quiz_seconds: 45,
         quiz_count: 20,
         enforce_schedule: false,
+        contact_address: 'Vigilance Department, Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal',
+        contact_email: 'cviclw@gmail.com',
+        contact_phone: '0341-2525555 / Rly: 22000',
         quiz_certificate_template: null,
         pledge_certificate_template: null,
         slogan_hindi: 'सत्यनिष्ठा से समृद्धि',
@@ -679,24 +718,32 @@ class Database {
     mobile: string;
     password?: string;
   }): ParticipantItem {
-    const existing = this.getParticipantByPf(data.pf_no);
+    const cleanPf = data.pf_no.trim().toUpperCase();
+    const cleanMobile = (data.mobile || '').replace(/\D+/g, '').slice(0, 10);
+    const existing = this.getParticipantByPf(cleanPf);
     if (existing) {
+      if (data.name && data.name.trim().toLowerCase() !== existing.name.trim().toLowerCase()) {
+        throw new Error(`PF Number ${cleanPf} is already registered to ${existing.name}. Duplicate PF numbers are strictly not allowed.`);
+      }
       if (data.password && data.password.trim()) {
         existing.password = data.password.trim();
-        this.persist();
       }
+      if (cleanMobile && cleanMobile.length === 10) {
+        existing.mobile = cleanMobile;
+      }
+      this.persist();
       return existing;
     }
 
     this.data.seq.participant++;
     const item: ParticipantItem = {
       id: this.data.seq.participant,
-      pf_no: data.pf_no.trim().toUpperCase(),
+      pf_no: cleanPf,
       name: data.name.trim(),
       designation: data.designation.trim(),
       department: data.department.trim(),
       unit_name: data.unit_name.trim(),
-      mobile: data.mobile.trim(),
+      mobile: cleanMobile || '9999999999',
       password: (data.password && data.password.trim()) || '123',
       created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
     };
@@ -871,7 +918,7 @@ class Database {
       const selNum = (sel === 'skip' || sel === undefined || sel === '') ? -1 : Number(sel);
       const isCorrect = q ? String(q.correct_index) === String(sel) : false;
       const isSkipped = sel === 'skip' || sel === undefined || sel === '';
-      const points = isSkipped ? 0 : (isCorrect ? 100 : -50);
+      const points = isSkipped ? 0 : (isCorrect ? 100 : -30);
 
       const options = q ? [q.option_a, q.option_b, q.option_c, q.option_d] : [];
 
@@ -968,6 +1015,120 @@ class Database {
       return true;
     }
     return false;
+  }
+
+  public saveLiveSessionResult(sessionId: string, resultData: any) {
+    if (!this.data.live_sessions) this.data.live_sessions = [];
+    let session = this.getLiveSessionById(sessionId);
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    // Prepare certificates for all participants in this live session
+    const certificates = (resultData.history?.leaderboard || []).map((p: any) => {
+      return {
+        certificate_no: `CLW/VAW2026/LIVE/${sessionId.replace(/[^a-zA-Z0-9]/g, '')}/${p.pf}`,
+        pf_no: p.pf,
+        name: p.name,
+        designation: p.designation,
+        department: p.department,
+        unit: p.unit || 'Chittaranjan Locomotive Works',
+        score: p.score,
+        max_score: (resultData.question_count || 10) * 100,
+        rank: p.rank,
+        session_id: sessionId,
+        session_title: resultData.title || session?.title || 'Live Vigilance Quiz',
+        date: now.slice(0, 10),
+        cvo_name: this.data.settings.cvo_name,
+        cvo_designation: this.data.settings.cvo_designation,
+        organization: this.data.settings.organization_name
+      };
+    });
+
+    const fullHistory = {
+      ...(resultData.history || {}),
+      certificates
+    };
+
+    if (session) {
+      session.status = 'completed';
+      session.completed_at = now;
+      session.title = resultData.title || session.title;
+      session.timer_seconds = resultData.timer_seconds ?? session.timer_seconds;
+      session.question_count = resultData.question_count ?? session.question_count;
+      session.participants_count = resultData.participants_count ?? (resultData.history?.leaderboard?.length || 0);
+      session.history = fullHistory;
+    } else {
+      session = {
+        id: sessionId,
+        title: resultData.title || `Live Session ${sessionId}`,
+        scheduled_at: now,
+        completed_at: now,
+        timer_seconds: resultData.timer_seconds || 30,
+        question_count: resultData.question_count || 10,
+        department: resultData.department || 'All',
+        status: 'completed',
+        created_at: now,
+        participants_count: resultData.participants_count ?? (resultData.history?.leaderboard?.length || 0),
+        history: fullHistory
+      };
+      this.data.live_sessions.unshift(session);
+    }
+    this.persist();
+    return session;
+  }
+
+  public getLiveSessionParticipantTrace(sessionId: string, pf: string) {
+    const session = this.getLiveSessionById(sessionId);
+    if (!session || !session.history) return null;
+    const cleanPf = pf.trim().toUpperCase();
+    const pAnswers = session.history.participant_answers?.[cleanPf];
+    const leaderboardEntry = session.history.leaderboard?.find((l: any) => l.pf === cleanPf);
+    const questions = session.history.questions || [];
+    const cert = (session.history as any).certificates?.find((c: any) => c.pf_no === cleanPf);
+
+    return {
+      session: {
+        id: session.id,
+        title: session.title,
+        department: session.department,
+        completed_at: session.completed_at || session.created_at,
+        timer_seconds: session.timer_seconds,
+        question_count: session.question_count
+      },
+      participant: leaderboardEntry || { pf: cleanPf, name: pAnswers?.name || 'Participant' },
+      answers: pAnswers?.answers || {},
+      questions,
+      certificate: cert || null
+    };
+  }
+
+  public getLiveSessionBackup(sessionId: string) {
+    const session = this.getLiveSessionById(sessionId);
+    if (!session) return null;
+    return {
+      backup_version: '2.0-live',
+      exported_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      session: {
+        id: session.id,
+        title: session.title,
+        scheduled_at: session.scheduled_at,
+        completed_at: session.completed_at,
+        department: session.department,
+        timer_seconds: session.timer_seconds,
+        question_count: session.question_count,
+        participants_count: session.participants_count,
+        status: session.status
+      },
+      settings_snapshot: {
+        organization: this.data.settings.organization_name,
+        programme: this.data.settings.programme_name,
+        cvo_name: this.data.settings.cvo_name,
+        cvo_designation: this.data.settings.cvo_designation
+      },
+      leaderboard: session.history?.leaderboard || [],
+      questions: session.history?.questions || [],
+      participant_answers: session.history?.participant_answers || {},
+      certificates: (session.history as any)?.certificates || []
+    };
   }
 
   // --- Admin Direct Database Table Access & Modification ---
@@ -1122,7 +1283,7 @@ class Database {
     if (!attempt) return null;
 
     // Calculate score
-    // User Rule: +100 for correct answer, -50 for negative / incorrect answer, 0 for skip / unattempted
+    // User Rule: +100 for correct answer, -30 for negative / incorrect answer, 0 for skip / unattempted
     let totalScore = 0;
     attempt.question_ids.forEach(qid => {
       const q = this.getQuestionById(qid);
@@ -1132,7 +1293,7 @@ class Database {
       } else if (q && String(q.correct_index) === String(sel)) {
         totalScore += 100;
       } else {
-        totalScore -= 50; // -50 points for negative answer
+        totalScore -= 30; // -30 points for each wrong attempt
       }
     });
 

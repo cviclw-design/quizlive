@@ -33,6 +33,7 @@ export interface LeaderboardEntry {
   name: string;
   designation: string;
   department: string;
+  unit?: string;
   marks: number; // Marks obtained
   score: number;
   correctCount: number;
@@ -189,6 +190,11 @@ class LiveQuizManager {
     const cleanPf = String(data.pf || '').trim().toUpperCase().replace(/\s+/g, '');
     if (!cleanPf) return { ok: false, status: 'waiting', error: 'Please enter a valid PF number.' };
 
+    const cleanMobile = String(data.mobile || '').replace(/\D+/g, '');
+    if (cleanMobile && cleanMobile.length !== 10) {
+      return { ok: false, status: 'waiting', error: 'Mobile number must not be more than 10 digits (exactly 10 digits required).' };
+    }
+
     // Check DB registration
     let dbP = db.getParticipantByPf(cleanPf);
     if (!dbP) {
@@ -201,9 +207,16 @@ class LiveQuizManager {
         designation: data.designation,
         department: data.department,
         unit_name: data.unit || 'Chittaranjan Locomotive Works',
-        mobile: data.mobile || '9999999999',
+        mobile: cleanMobile || '9999999999',
         password: data.password || '123'
       });
+    } else if (data.name && data.name.trim().toLowerCase() !== dbP.name.trim().toLowerCase()) {
+      // Prevent duplicate PF hijacking by a different employee
+      return {
+        ok: false,
+        status: 'waiting',
+        error: `PF Number is unique and already assigned to another participant (${dbP.name}). Duplicate PF numbers are strictly not allowed.`
+      };
     }
 
     // Verify password if supplied or default 123
@@ -430,7 +443,7 @@ class LiveQuizManager {
     //    E.g.: 2s -> 29 bonus -> 129 total
     //    E.g.: 30s -> 1 bonus -> 101 total
     //    E.g.: > 30s -> 0 bonus -> 100 total
-    // 3. Negative Answer: MINUS 50 points (-50)
+    // 3. Negative Answer: MINUS 30 points (-30)
     // 4. If option changed within time limit, last option selected and that time is considered for points.
     let points = 0;
     if (isCorrect) {
@@ -440,8 +453,8 @@ class LiveQuizManager {
       participant.marks += 1;
       participant.correctCount += 1;
     } else {
-      // Negative answer: -50 points
-      points = -50;
+      // Negative answer: -30 points for each wrong attempt
+      points = -30;
     }
 
     participant.score += points;
@@ -768,7 +781,21 @@ class LiveQuizManager {
             correct_index: q.correct_index
           })),
           leaderboard: finalLeaderboard,
-          participant_answers: answersRecord
+          participant_answers: answersRecord,
+          certificates: finalLeaderboard.map((lb) => ({
+            certificate_no: `CLW/VAW2026/LIVE/${this.activeSessionId}/${lb.pf}`,
+            name: lb.name,
+            pf_no: lb.pf,
+            designation: lb.designation,
+            department: lb.department,
+            unit: lb.unit,
+            score: lb.score,
+            max_score: this.questions.length * 100,
+            rank: lb.rank,
+            date: new Date().toISOString().slice(0, 10),
+            session_id: this.activeSessionId,
+            session_title: this.activeSessionTitle
+          }))
         }
       });
     } catch (e) {
@@ -809,7 +836,7 @@ class LiveQuizManager {
     const list = Array.from(this.participants.values());
 
     // Sort by:
-    // 1. Total score DESC (100 base + speed bonus up to 30, minus 50 for negative answer)
+    // 1. Total score DESC (100 base + speed bonus up to 30, minus 30 for negative answer)
     // 2. Marks obtained DESC (correct count)
     // 3. Tie-breaker: Seniority decided by timing to solve question (less time taken = senior / higher rank)
     // 4. Earlier joinedAt ASC
@@ -839,6 +866,7 @@ class LiveQuizManager {
         name: p.name,
         designation: p.designation,
         department: p.department,
+        unit: p.unit || 'Chittaranjan Locomotive Works',
         marks: p.marks,
         score: p.score,
         correctCount: p.correctCount,

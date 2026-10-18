@@ -28,7 +28,11 @@ import {
   UserPlus,
   Trophy,
   Clock,
-  Medal
+  Medal,
+  Building,
+  Mail,
+  Phone,
+  MapPin
 } from 'lucide-react';
 
 export default function App() {
@@ -241,18 +245,65 @@ export default function App() {
 
     try {
       soundEffects.playClick();
-      const res = await api.getCertificate(searchPfInput.trim());
-      if (res.ok && res.certificate) {
-        setActiveCert(res.certificate);
+      const cleanPf = searchPfInput.trim().toUpperCase();
+      let cert: any = null;
+      try {
+        const liveRes = await api.getLiveCertificate(cleanPf);
+        if (liveRes.ok && liveRes.certificate) {
+          cert = liveRes.certificate;
+        }
+      } catch {}
+
+      if (!cert) {
+        const res = await api.getCertificate(cleanPf);
+        if (res.ok && res.certificate) {
+          cert = res.certificate;
+        }
+      }
+
+      if (cert) {
+        setActiveCert(cert);
         setSearchPfModal(false);
         setSearchPfInput('');
         setCurrentPage('certificate');
+      } else {
+        setSearchPfError('No certificate found for this PF number. Please verify your PF or participate in a scheduled Live Quiz session.');
+        soundEffects.playIncorrect();
       }
     } catch (err: unknown) {
       setSearchPfError((err as Error).message || 'No submitted certificate found for this PF number.');
       soundEffects.playIncorrect();
     }
   };
+
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  const faqs = [
+    {
+      q: 'How do I participate in the Live Quiz competition?',
+      a: 'All quiz competitions are now conducted LIVE on the basis of schedule. Click "Join Online Live Quiz", enter your Name, Designation, Department, Unit, unique PF Number, and 10-digit Mobile number to enter the live waiting room.'
+    },
+    {
+      q: 'What is the negative marking scheme?',
+      a: 'Each correct answer awards 100 base points plus up to 30 speed bonus points. Each incorrect/wrong attempt deducts 30 points (-30 negative marking). Skipped or unattempted questions incur 0 points penalty.'
+    },
+    {
+      q: 'How is the speed bonus and ranking tie-breaker calculated?',
+      a: 'Points are awarded based on both correctness and speed: 100 base marks + (31 - seconds taken). If you answer within 1 second, you receive +30 bonus points. Ties on marks are resolved in favor of the participant with lesser total time taken (seniority by speed).'
+    },
+    {
+      q: 'Is PF Number strictly unique?',
+      a: 'Yes. Each employee must use their own official PF Number. No duplicate PF registrations or simultaneous attempts are allowed across the platform.'
+    },
+    {
+      q: 'What are the mobile number requirements?',
+      a: 'Mobile number must not be more than 10 digits (exactly 10 numeric digits required) for SMS notification and administrative verification.'
+    },
+    {
+      q: 'When and how do I receive my official participation certificate?',
+      a: 'Your verified digital e-Certificate (featuring the official signature photo of the CVO and verification seal) is generated automatically as soon as the live quiz session concludes. You can also retrieve it anytime using the "Find My Certificate" button by entering your PF Number.'
+    }
+  ];
 
   const departmentsList = useMemo(() => {
     const list = homeData?.departments && homeData.departments.length > 0
@@ -298,6 +349,10 @@ export default function App() {
   const regEnabled = homeData?.settings?.registration_enabled !== false;
   const cvoName = homeData?.settings?.cvo_name || 'Sugind Surendran';
   const cvoDesig = homeData?.settings?.cvo_designation || 'SDGM & Chief Vigilance Officer';
+  const cvoOrg = homeData?.settings?.cvo_organization || 'Chittaranjan Locomotive Works, Chittaranjan';
+  const contactAddress = homeData?.settings?.contact_address || 'Vigilance Department, Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal';
+  const contactEmail = homeData?.settings?.contact_email || 'cviclw@gmail.com';
+  const contactPhone = homeData?.settings?.contact_phone || '0341-2525555 / Rly: 22000';
   const logoUrl = homeData?.settings?.logo_url || 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png';
 
   return (
@@ -314,7 +369,7 @@ export default function App() {
               className="w-14 h-14 sm:w-16 sm:h-16 object-contain rounded-full bg-white p-1 border-2 border-[#d4a017] shadow-sm shrink-0"
             />
             <div>
-              <div className="text-xs sm:text-sm font-bold tracking-wider uppercase text-amber-200">
+              <div className="text-sm sm:text-base font-black tracking-wider uppercase text-amber-300 drop-shadow-sm">
                 {orgName}
               </div>
               <h1 className="text-sm sm:text-base font-bold leading-tight">
@@ -398,26 +453,11 @@ export default function App() {
           </button>
 
           <button
-            onClick={() => navigateTo('login')}
-            className={`px-3 py-1.5 rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              currentPage === 'login' ? 'bg-white text-[#071a3a] shadow-xs' : 'text-white/80 hover:text-white'
-            }`}
+            onClick={() => setSearchPfModal(true)}
+            className="px-3 py-1.5 rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 text-white/80 hover:text-white"
           >
-            <LogIn className="w-3.5 h-3.5 text-amber-300" />
-            <span>Standard Quiz / Login</span>
-          </button>
-
-          <button
-            onClick={() => navigateTo('register')}
-            className={`px-3 py-1.5 rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-              currentPage === 'register' ? 'bg-white text-[#071a3a] shadow-xs' : 'text-white/80 hover:text-white'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>New Registration</span>
-            {!regEnabled && (
-              <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-500/80 text-white font-bold">Closed</span>
-            )}
+            <Award className="w-3.5 h-3.5 text-amber-300" />
+            <span>Find My Certificate</span>
           </button>
 
           <button
@@ -603,28 +643,28 @@ export default function App() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 text-xs text-slate-700">
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
-                  <strong className="text-[#071a3a] block mb-1">1. Registration &amp; Login:</strong>
-                  Register your official PF number. Default password is <code className="font-bold text-amber-800">123</code>.
+                  <strong className="text-[#071a3a] block mb-1">1. Live Scheduled Competition:</strong>
+                  All quizzes are conducted LIVE as per the official department &amp; common schedule. Exactly one attempt per unique PF number.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">2. Questions &amp; Marks:</strong>
-                  A full standard paper comprises 20 questions, for a total of 2000 maximum points.
+                  Each session features scheduled questions with 100 base points for each correct answer.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
-                  <strong className="text-[#071a3a] block mb-1">3. Time Limit:</strong>
-                  45 seconds are allotted per question. Timeout automatically advances to next question.
+                  <strong className="text-[#071a3a] block mb-1">3. Time Limit &amp; Speed Bonus:</strong>
+                  Fast responses earn speed bonus points (up to +30 points). Timer automatically advances when expired.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">4. Submission:</strong>
-                  Press Submit Answer after choosing your option to lock in your response.
+                  Select your option within the timer to lock in your live response.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">5. Marking Scheme:</strong>
-                  +100 for correct answer · −50 for negative/wrong answer · 0 for "Not Answering".
+                  +100 for correct answer · −30 for negative/wrong answer · 0 for "Not Answering".
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">6. Instant Certificate:</strong>
-                  Score is calculated immediately upon completing 20 questions, generating your official e-Certificate.
+                  Live score is calculated immediately upon completing the quiz, generating your official e-Certificate.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">7. Official CVO Signature:</strong>
@@ -640,22 +680,29 @@ export default function App() {
                 <strong>Queries / Assistance:</strong> Vigilance Department, Administrative Building, {orgName} · {cvoDesig}: {cvoName}
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
-                  onClick={() => navigateTo('login')}
-                  className="px-6 py-2.5 bg-blue-950 hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-1.5"
+                  onClick={() => navigateTo('live')}
+                  className="px-6 py-2.5 bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Participant Login →</span>
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                  <Zap className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Enter Live Quiz Room →</span>
                 </button>
-                {regEnabled && (
-                  <button
-                    onClick={() => navigateTo('register')}
-                    className="px-6 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-xs transition-colors"
-                  >
-                    New Registration →
-                  </button>
-                )}
+                <button
+                  onClick={() => navigateTo('schedule')}
+                  className="px-6 py-2.5 bg-[#071a3a] hover:bg-blue-900 text-white text-xs font-bold rounded-lg shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-amber-300" />
+                  <span>View Live Schedules →</span>
+                </button>
+                <button
+                  onClick={() => setSearchPfModal(true)}
+                  className="px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-lg shadow-2xs transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <Award className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Find My Certificate</span>
+                </button>
               </div>
             </div>
           </div>
@@ -1009,26 +1056,26 @@ export default function App() {
             {/* Main Hero Card */}
             <div className="relative overflow-hidden bg-gradient-to-r from-[#071a3a] via-[#163e8a] to-[#0b6b3a] text-white rounded-3xl p-6 sm:p-12 mb-8 shadow-xl">
               <div className="max-w-3xl relative z-10">
-                <div className="text-xs font-extrabold tracking-widest uppercase text-amber-300 mb-1">
+                <div className="text-sm sm:text-base font-black tracking-widest uppercase text-amber-300 mb-2 drop-shadow-sm">
                   {orgName} · VIGILANCE AWARENESS WEEK 2026
                 </div>
                 <div className="text-xl sm:text-2xl text-amber-100 font-serif italic mb-2">
                   सत्यनिष्ठा से समृद्धि · Probity for Prosperity
                 </div>
-                <h2 className="text-3xl sm:text-5xl font-serif font-extrabold leading-tight tracking-tight mb-3">
+                <h2 className="text-3xl sm:text-5xl font-serif font-black leading-tight tracking-tight mb-3">
                   {progName}
                 </h2>
                 <div className="inline-block px-4 py-1.5 bg-white/15 border border-white/25 rounded-full text-xs font-semibold mb-4">
                   Programme Period: {progPeriod} · Common for all Departments
                 </div>
                 <p className="text-xs sm:text-sm text-slate-200 leading-relaxed mb-8 max-w-2xl">
-                  Organised by the Vigilance Department, {orgName}, under Shri <strong className="text-amber-200">{cvoName}</strong>, {cvoDesig}. All employees and officers are encouraged to participate.
+                  Organised by the Vigilance Department, <strong className="font-bold text-white">{orgName}</strong>, under Shri <strong className="text-amber-200">{cvoName}</strong>, {cvoDesig}. All employees and officers are invited to participate in the scheduled Live Quiz competitions.
                 </p>
 
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     onClick={() => navigateTo('live')}
-                    className="px-6 py-3.5 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white text-xs sm:text-sm font-extrabold rounded-xl shadow-lg shadow-rose-600/40 transition-all flex items-center gap-2 cursor-pointer transform hover:scale-102"
+                    className="px-7 py-3.5 bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white text-xs sm:text-sm font-black rounded-xl shadow-lg shadow-rose-600/40 transition-all flex items-center gap-2 cursor-pointer transform hover:scale-102"
                   >
                     <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
                     <Zap className="w-4 h-4 text-amber-200" />
@@ -1036,36 +1083,19 @@ export default function App() {
                   </button>
 
                   <button
-                    onClick={() => navigateTo('login')}
-                    className="px-5 py-3 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs sm:text-sm font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
-                  >
-                    <LogIn className="w-4 h-4 text-amber-300" />
-                    <span>Standard Quiz Login</span>
-                  </button>
-
-                  {regEnabled && (
-                    <button
-                      onClick={() => navigateTo('register')}
-                      className="px-5 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                    >
-                      <UserPlus className="w-4 h-4" />
-                      <span>New Registration</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  <button
                     onClick={() => navigateTo('schedule')}
-                    className="px-5 py-3 bg-white hover:bg-slate-100 text-[#071a3a] text-xs sm:text-sm font-bold rounded-xl shadow-md transition-colors"
+                    className="px-5 py-3 bg-white hover:bg-slate-100 text-[#071a3a] text-xs sm:text-sm font-bold rounded-xl shadow-md transition-colors flex items-center gap-2 cursor-pointer"
                   >
-                    Common Schedule
+                    <Calendar className="w-4 h-4 text-blue-900" />
+                    <span>Live Schedule &amp; Timetable</span>
                   </button>
 
                   <button
                     onClick={() => setSearchPfModal(true)}
-                    className="px-5 py-3 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs sm:text-sm font-bold rounded-xl transition-colors"
+                    className="px-5 py-3 bg-white/15 hover:bg-white/25 border border-white/30 text-white text-xs sm:text-sm font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer"
                   >
-                    View Certificate
+                    <Award className="w-4 h-4 text-amber-300" />
+                    <span>Find My Certificate</span>
                   </button>
 
                   <button
@@ -1073,7 +1103,7 @@ export default function App() {
                       soundEffects.playClick();
                       setShareModalOpen(true);
                     }}
-                    className="px-5 py-3 bg-[#ff8a1e] hover:bg-[#e67a15] text-[#071a3a] text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
+                    className="px-5 py-3 bg-[#ff8a1e] hover:bg-[#e67a15] text-[#071a3a] text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                   >
                     <Share2 className="w-4 h-4" />
                     <span>Share Quiz Link &amp; QR</span>
@@ -1092,10 +1122,10 @@ export default function App() {
                   📖
                 </div>
                 <h3 className="font-bold text-base text-[#071a3a] mb-1">
-                  Quiz Guidelines
+                  Live Quiz Guidelines
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  20 questions, 45 seconds each, +100 correct and -50 negative marking. One attempt per PF number.
+                  Synchronous live exam, +100 correct, -30 points negative marking for wrong answer, 0 for timeout. Fast response wins speed bonus!
                 </p>
                 <button
                   onClick={() => navigateTo('guidelines')}
@@ -1336,22 +1366,143 @@ export default function App() {
         </div>
       )}
 
-      {/* SWR / CLW Footer */}
-      <footer className="no-print bg-white border-t border-[#eadcc4] py-6 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-6xl mx-auto space-y-2">
-          <div>
-            Vigilance Department, Chittaranjan Locomotive Works · Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal.
+      {/* CLW / SWR Official Bottom Plate Footer */}
+      <footer className="no-print bg-gradient-to-b from-white via-slate-50 to-[#eef3f9] border-t-2 border-[#d4a017]/40 text-slate-700 pt-8 pb-10 px-4 sm:px-6 shadow-inner">
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Top Brand Banner of Bottom Plate */}
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-200">
+            <div className="flex items-center gap-3.5 text-center md:text-left">
+              <img
+                src={logoUrl}
+                alt="Emblem"
+                className="w-12 h-12 object-contain rounded-full bg-white p-1 border-2 border-[#d4a017] shadow-xs shrink-0"
+              />
+              <div>
+                <div className="text-sm sm:text-base font-black uppercase tracking-wider text-[#071a3a] drop-shadow-2xs">
+                  {orgName}
+                </div>
+                <div className="text-xs font-bold text-blue-900">
+                  {progName}
+                </div>
+                <div className="text-[11px] text-amber-800 font-serif italic">
+                  {homeData?.settings?.slogan_hindi || 'सत्यनिष्ठा से समृद्धि'} · {homeData?.settings?.slogan_english || 'Probity for Prosperity'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                onClick={() => navigateTo('live')}
+                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Live Quiz</span>
+              </button>
+              <button
+                onClick={() => navigateTo('schedule')}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-semibold text-xs rounded-lg transition-colors"
+              >
+                Schedule
+              </button>
+              <button
+                onClick={() => navigateTo('guidelines')}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-semibold text-xs rounded-lg transition-colors"
+              >
+                Guidelines
+              </button>
+              <button
+                onClick={() => setSearchPfModal(true)}
+                className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-semibold text-xs rounded-lg transition-colors"
+              >
+                Certificate Lookup
+              </button>
+              <button
+                onClick={() => navigateTo('admin')}
+                className="px-3.5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-all"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-300" />
+                <span>Admin Console</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center justify-center gap-3 text-slate-600 font-medium">
-            <span>SDGM &amp; CVO: {cvoName}</span>
-            <span>·</span>
-                    
-            <button
-              onClick={() => navigateTo('admin')}
-              className="text-blue-900 font-bold hover:underline"
-            >
-              Admin Portal
-            </button>
+
+          {/* Detailed Info Grid: Competent Authority, Address & Contact Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-xs">
+            {/* Authority Plate */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
+                <ShieldCheck className="w-4 h-4 text-emerald-700" />
+                <span>Competent Vigilance Authority</span>
+              </div>
+              <div className="text-slate-800 text-sm font-extrabold">
+                Shri {cvoName}
+              </div>
+              <div className="text-slate-600 font-semibold">
+                {cvoDesig}
+              </div>
+              <div className="text-[11px] text-slate-500">
+                {cvoOrg || orgName}
+              </div>
+            </div>
+
+            {/* Official Contact & Address Plate */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
+              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
+                <MapPin className="w-4 h-4 text-rose-600" />
+                <span>Official Department Address</span>
+              </div>
+              <p className="text-slate-700 leading-relaxed font-medium">
+                {contactAddress}
+              </p>
+              <div className="text-[11px] text-slate-500 pt-1">
+                Programme Period: <strong className="text-slate-800">{progPeriod}</strong>
+              </div>
+            </div>
+
+            {/* Communication & Helpline Plate */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2 sm:col-span-2 lg:col-span-1">
+              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
+                <Mail className="w-4 h-4 text-blue-700" />
+                <span>Helpline &amp; Assistance</span>
+              </div>
+              <div className="space-y-1.5 pt-0.5">
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>Email:</span>
+                  <a href={`mailto:${contactEmail}`} className="font-semibold text-blue-900 hover:underline">
+                    {contactEmail}
+                  </a>
+                </div>
+                <div className="flex items-center gap-2 text-slate-700">
+                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>Phone / Rly:</span>
+                  <span className="font-semibold text-slate-800 font-mono">
+                    {contactPhone}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
+                  <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>Departments Covered: <strong className="text-slate-800">{departmentsList.length}</strong> · Units: <strong className="text-slate-800">{unitsList.length}</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Copyright & Government Portals Notice */}
+          <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 text-center sm:text-left">
+            <div>
+              © 2026 <strong className="font-bold text-slate-800">{orgName}</strong> · Vigilance Organisation. All rights reserved.
+            </div>
+            <div className="flex items-center gap-3 font-medium">
+              <span className="text-slate-600">Probity for Prosperity</span>
+              <span>·</span>
+              <button
+                onClick={() => navigateTo('admin')}
+                className="text-blue-950 font-bold hover:underline"
+              >
+                Vigilance Admin Portal
+              </button>
+            </div>
           </div>
         </div>
       </footer>

@@ -141,6 +141,18 @@ class SoundEffects {
       // AudioContext failure gracefully ignored
     }
   }
+
+  public playDing() {
+    this.playCorrect();
+  }
+
+  public playBuzz() {
+    this.playIncorrect();
+  }
+
+  public playCheer() {
+    this.playFanfare();
+  }
 }
 
 export const soundEffects = new SoundEffects();

@@ -348,8 +348,8 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
           setSubmittingReg(false);
           return;
         }
-        if (regMobile.replace(/\D/g, '').length < 10) {
-          setRegError('Please enter a valid 10-digit mobile number.');
+        if (regMobile.replace(/\D/g, '').length !== 10) {
+          setRegError('Mobile number must not be more than 10 digits (exactly 10 digits required).');
           setSubmittingReg(false);
           return;
         }
@@ -357,7 +357,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
           name: regName.trim(),
           pf: regPf.trim().toUpperCase(),
           designation: regDesig.trim(),
-          mobile: regMobile.trim(),
+          mobile: regMobile.replace(/\D/g, '').slice(0, 10),
           department: regDept,
           unit: 'Chittaranjan Locomotive Works',
           password: '123'
@@ -389,7 +389,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
 
         fetchState(false);
       } else {
-        setRegError(res.message || 'Failed to enter live quiz.');
+        setRegError(res.error || res.message || 'Failed to enter live quiz.');
       }
     } catch (err: any) {
       setRegError(err?.message || 'Failed to enter live quiz.');
@@ -416,7 +416,9 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
       if (res.ok) {
         setLastSubmissionResult(res);
         if (res.isCorrect) {
-          soundEffects.playCorrect();
+          soundEffects.playDing();
+        } else {
+          soundEffects.playBuzz();
         }
       }
     } catch (err) {
@@ -899,7 +901,7 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                   <div className="pt-4 text-xs text-amber-200/90 font-medium bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left">
                     <span className="font-bold text-amber-300 block mb-1">⚡ Official Scoring & Rules:</span>
                     • <strong>Correct answer:</strong> 100 points + up to 30 Speed Bonus (30 if within 1s, 29 in 2s, 30 − time taken).<br />
-                    • <strong>Negative answer:</strong> −50 points.<br />
+                    • <strong>Negative answer:</strong> −30 points for each wrong attempt.<br />
                     • <strong>Option change:</strong> You can change your choice anytime before timer expires! The last option selected and that time is considered.
                   </div>
                 </div>
@@ -912,6 +914,22 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                 
                 {/* Question Progress & Countdown Timer Header */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
+                  {/* Overall Exam Progress Bar */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 font-semibold mb-1.5">
+                      <span className="text-amber-300 font-bold">Exam Progress: {(liveState.activeQuestion.index || 0) + 1} of {liveState.activeQuestion.total || liveState.questionCount} Questions</span>
+                      <span className="text-emerald-400 font-mono">{Math.round((((liveState.activeQuestion.index || 0) + 1) / (liveState.activeQuestion.total || liveState.questionCount || 10)) * 100)}% Complete</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-850 rounded-full overflow-hidden border border-slate-800">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, Math.max(5, (((liveState.activeQuestion.index || 0) + 1) / (liveState.activeQuestion.total || liveState.questionCount || 10)) * 100))}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex items-center justify-between gap-4 mb-4">
                     <span className="text-xs font-bold uppercase tracking-widest text-amber-400 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full">
                       Question {(liveState.activeQuestion.index || 0) + 1} of {liveState.activeQuestion.total || liveState.questionCount}

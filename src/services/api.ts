@@ -77,10 +77,13 @@ export interface PublicHomeData {
   settings: {
     cvo_name: string;
     cvo_designation: string;
-    cvo_organization: string;
+    cvo_organization?: string;
     organization_name?: string;
     organization_email?: string;
     organization_address?: string;
+    contact_address?: string;
+    contact_email?: string;
+    contact_phone?: string;
     programme_name?: string;
     programme_period?: string;
     registration_enabled?: boolean;
@@ -170,6 +173,9 @@ export interface AdminSettingsData {
   organization_name?: string;
   organization_email?: string;
   organization_address?: string;
+  contact_address?: string;
+  contact_email?: string;
+  contact_phone?: string;
   programme_name?: string;
   programme_period?: string;
   registration_enabled?: boolean;
@@ -740,6 +746,18 @@ class ApiService {
 
   public async adminGetLiveSessionParticipantTrace(sessionId: string, pf: string) {
     return this.request<{ ok: boolean; trace: any }>(`/live/sessions/${encodeURIComponent(sessionId)}/participant/${encodeURIComponent(pf)}`, {
+      method: 'GET'
+    });
+  }
+
+  public async adminGetLiveSessionBackup(sessionId: string) {
+    return this.request<{ ok: boolean; backup: any }>(`/live/sessions/${encodeURIComponent(sessionId)}/backup`, {
+      method: 'GET'
+    });
+  }
+
+  public async getLiveCertificate(pf: string) {
+    return this.request<{ ok: boolean; certificate: any; sessionTitle?: string }>(`/live/certificate/${encodeURIComponent(pf)}`, {
       method: 'GET'
     });
   }
