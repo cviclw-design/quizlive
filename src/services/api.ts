@@ -150,6 +150,9 @@ export interface CertificateData {
   logo_url: string;
   slogan_hindi?: string;
   slogan_english?: string;
+  organization_name?: string;
+  programme_name?: string;
+  programme_period?: string;
 }
 
 export interface AdminQuestionItem {
@@ -252,6 +255,9 @@ export interface LiveQuizPublicState {
   reviewStartTime?: number;
   sloganHindi: string;
   sloganEnglish: string;
+  organizationName?: string;
+  programmeName?: string;
+  programmePeriod?: string;
 }
 
 class ApiService {
@@ -352,7 +358,14 @@ class ApiService {
   }
 
   public async getLeaderboard() {
-    return this.request<{ ok: boolean; leaderboard: PublicLeaderboardItem[] }>('/leaderboard', {
+    return this.request<{
+      ok: boolean;
+      mode?: 'live' | 'last_completed' | 'none';
+      status?: string;
+      sessionTitle?: string | null;
+      completedAt?: string;
+      leaderboard: PublicLeaderboardItem[];
+    }>('/leaderboard', {
       method: 'GET'
     });
   }

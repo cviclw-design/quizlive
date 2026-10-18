@@ -379,7 +379,10 @@ apiRouter.get('/certificate', (req, res) => {
       seal_text: settings.seal_text,
       logo_url: settings.logo_url,
       slogan_hindi: settings.slogan_hindi || 'सत्यनिष्ठा से समृद्धि',
-      slogan_english: settings.slogan_english || 'Probity for Prosperity'
+      slogan_english: settings.slogan_english || 'Probity for Prosperity',
+      organization_name: settings.organization_name || 'Chittaranjan Locomotive Works (CLW)',
+      programme_name: settings.programme_name || 'Vigilance Awareness Week 2026 Quiz Competition',
+      programme_period: settings.programme_period || '2026'
     }
   });
 });
@@ -648,11 +651,101 @@ Personnel,Rotational transfer of staff in sensitive posts is implemented to:,Sav
   res.send(sampleCsv);
 });
 
-// Public Leaderboard with Seniority by Timing
+// Public Leaderboard with Seniority by Timing (Only during live quiz or showing last completed quiz data)
 apiRouter.get('/leaderboard', (_req, res) => {
+  const liveState = liveQuiz.getPublicState();
+  const isLiveActive = liveState.status === 'question' || liveState.status === 'review' || liveState.status === 'lobby';
+
+  if (isLiveActive && liveState.leaderboard && liveState.leaderboard.length > 0) {
+    const mapped = liveState.leaderboard.map(lb => ({
+      rank: lb.rank,
+      pf: lb.pf,
+      name: lb.name,
+      designation: lb.designation,
+      department: lb.department,
+      unit: lb.unit || 'Chittaranjan Locomotive Works',
+      score: lb.score,
+      max_score: (liveState.questionCount || 10) * 100,
+      duration_seconds: Math.round(lb.totalTimeTaken),
+      submitted_at: '',
+      isSeniorTieBreak: lb.isSeniorByTime
+    }));
+
+    return res.json({
+      ok: true,
+      mode: 'live',
+      status: liveState.status,
+      sessionTitle: liveState.activeSessionTitle || 'Current Live Quiz Competition',
+      leaderboard: mapped
+    });
+  }
+
+  // Next, if live quiz just ended
+  if (liveState.status === 'ended' && liveState.leaderboard && liveState.leaderboard.length > 0) {
+    const mapped = liveState.leaderboard.map(lb => ({
+      rank: lb.rank,
+      pf: lb.pf,
+      name: lb.name,
+      designation: lb.designation,
+      department: lb.department,
+      unit: lb.unit || 'Chittaranjan Locomotive Works',
+      score: lb.score,
+      max_score: (liveState.questionCount || 10) * 100,
+      duration_seconds: Math.round(lb.totalTimeTaken),
+      submitted_at: '',
+      isSeniorTieBreak: lb.isSeniorByTime
+    }));
+
+    return res.json({
+      ok: true,
+      mode: 'last_completed',
+      status: 'ended',
+      sessionTitle: liveState.activeSessionTitle || 'Last Live Quiz Session',
+      leaderboard: mapped
+    });
+  }
+
+  // Next: check history of completed live sessions
+  const sessions = db.getLiveSessions();
+  const completedWithStandings = sessions.filter(s =>
+    s.status === 'completed' &&
+    s.history?.leaderboard &&
+    s.history.leaderboard.length > 0
+  );
+
+  if (completedWithStandings.length > 0) {
+    const lastSession = completedWithStandings[completedWithStandings.length - 1];
+    const mapped = (lastSession.history?.leaderboard || []).map((lb: any) => ({
+      rank: lb.rank,
+      pf: lb.pf,
+      name: lb.name,
+      designation: lb.designation,
+      department: lb.department,
+      unit: lb.unit || 'Chittaranjan Locomotive Works',
+      score: lb.score,
+      max_score: (lastSession.question_count || 10) * 100,
+      duration_seconds: Math.round(lb.totalTimeTaken || lb.duration_seconds || 0),
+      submitted_at: lastSession.completed_at || lastSession.history?.ended_at || '',
+      isSeniorTieBreak: lb.isSeniorByTime || lb.isSeniorTieBreak
+    }));
+
+    return res.json({
+      ok: true,
+      mode: 'last_completed',
+      status: 'completed',
+      sessionTitle: lastSession.title,
+      completedAt: lastSession.completed_at || lastSession.history?.ended_at,
+      leaderboard: mapped
+    });
+  }
+
+  // Otherwise, no live quiz in progress and no previous live quiz data: HIDE LEADERBOARD!
   res.json({
     ok: true,
-    leaderboard: db.getLeaderboard(50)
+    mode: 'none',
+    status: 'idle',
+    sessionTitle: null,
+    leaderboard: []
   });
 });
 
@@ -685,7 +778,8 @@ apiRouter.post('/admin/settings', requireAdmin, (req, res) => {
     quiz_count,
     contact_address,
     contact_email,
-    contact_phone
+    contact_phone,
+    logo_url
   } = req.body || {};
 
   const addr = contact_address !== undefined ? contact_address : organization_address;
@@ -699,6 +793,7 @@ apiRouter.post('/admin/settings', requireAdmin, (req, res) => {
     ...(addr !== undefined && { contact_address: String(addr).trim() }),
     ...(em !== undefined && { contact_email: String(em).trim() }),
     ...(contact_phone !== undefined && { contact_phone: String(contact_phone).trim() }),
+    ...(logo_url !== undefined && { logo_url: String(logo_url).trim() }),
     ...(programme_name !== undefined && { programme_name: String(programme_name).trim() }),
     ...(programme_period !== undefined && { programme_period: String(programme_period).trim() }),
     ...(registration_enabled !== undefined && { registration_enabled: Boolean(registration_enabled) }),

@@ -3083,6 +3083,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
               </div>
 
+              {/* Universal Customization: Logo & Official Slogans */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-200">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Organization Logo URL (Railway / Department)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.logo_url || ''}
+                    onChange={e => setSettings({ ...settings, logo_url: e.target.value })}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSettings({ ...settings, logo_url: 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png' })}
+                      className="text-[10px] text-blue-900 font-semibold hover:underline"
+                    >
+                      Use Railways Emblem
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Programme Slogan (Hindi)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.slogan_hindi || ''}
+                    onChange={e => setSettings({ ...settings, slogan_hindi: e.target.value })}
+                    placeholder="e.g. सत्यनिष्ठा से समृद्धि"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Programme Slogan (English)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.slogan_english || ''}
+                    onChange={e => setSettings({ ...settings, slogan_english: e.target.value })}
+                    placeholder="e.g. Probity for Prosperity"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-end pt-3">
                 <button
                   type="submit"

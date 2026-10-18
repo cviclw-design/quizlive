@@ -20,12 +20,28 @@ interface ShareModalProps {
   isOpen: boolean;
   onClose: () => void;
   directRegistration?: boolean;
+  orgName?: string;
+  progName?: string;
+  progPeriod?: string;
+  cvoName?: string;
+  cvoDesig?: string;
+  cvoOrg?: string;
+  sloganHindi?: string;
+  sloganEnglish?: string;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
   isOpen,
   onClose,
-  directRegistration = true
+  directRegistration = true,
+  orgName = 'Chittaranjan Locomotive Works (CLW)',
+  progName = 'Vigilance Awareness Week 2026 Quiz Competition',
+  progPeriod = '2026',
+  cvoName = 'Sugind Surendran',
+  cvoDesig = 'SDGM & Chief Vigilance Officer',
+  cvoOrg = 'Chittaranjan Locomotive Works',
+  sloganHindi = 'सत्यनिष्ठा से समृद्धि',
+  sloganEnglish = 'Probity for Prosperity'
 }) => {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -85,30 +101,32 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   };
 
   const whatsappMessage = encodeURIComponent(
-    `*Chittaranjan Locomotive Works (CLW) · Vigilance Department*\n` +
-    `*Vigilance Awareness Week 2026 Online Quiz Competition*\n\n` +
-    `Theme: *Probity for Prosperity (सत्यनिष्ठा से समृद्धि)*\n` +
-    `Under the guidance of Shri Sugind Surendran, SDGM & Chief Vigilance Officer.\n\n` +
+    `*${orgName}*\n` +
+    `*${progName}*\n\n` +
+    `Theme: *${sloganEnglish} (${sloganHindi})*\n` +
+    `Under the guidance of Shri ${cvoName}, ${cvoDesig}.\n\n` +
     `👉 *Click here to participate & get your official e-Certificate:*\n${shareUrl}\n\n` +
-    `Open to all Railway officers, supervisors and staff. Test your vigilance awareness today!`
+    `Open to all officers, supervisors and staff. Test your knowledge today!`
   );
 
-  const emailSubject = encodeURIComponent('CLW VAW 2026 Online Quiz Competition - Participate & Get Certificate');
+  const emailSubject = encodeURIComponent(`${orgName} - ${progName} - Participate & Get Certificate`);
   const emailBody = encodeURIComponent(
     `Dear Colleague,\n\n` +
-    `You are invited to participate in the Online Quiz Competition organized by the Vigilance Department, Chittaranjan Locomotive Works (CLW) for Vigilance Awareness Week 2026.\n\n` +
-    `Theme: Probity for Prosperity (सत्यनिष्ठा से समृद्धि)\n\n` +
+    `You are invited to participate in the Online Quiz Competition organized by ${orgName}.\n\n` +
+    `Event: ${progName} (${progPeriod})\n` +
+    `Theme: ${sloganEnglish} (${sloganHindi})\n\n` +
     `Click the link below to register and attempt the quiz:\n${shareUrl}\n\n` +
-    `On completion, you will receive an official e-Certificate of Participation issued under the authority of Shri Sugind Surendran, SDGM & Chief Vigilance Officer, CLW.\n\n` +
-    `Vigilance Department\nChittaranjan Locomotive Works, Chittaranjan`
+    `On completion, you will receive an official e-Certificate of Participation issued under the authority of Shri ${cvoName}, ${cvoDesig}, ${cvoOrg}.\n\n` +
+    `${orgName}`
   );
 
+  const safeFilePrefix = orgName.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 20);
   const handleDownloadQr = () => {
     soundEffects.playClick();
     if (!qrDataUrl) return;
     const a = document.createElement('a');
     a.href = qrDataUrl;
-    a.download = 'CLW-VAW-2026-Quiz-QRCode.png';
+    a.download = `${safeFilePrefix}-Quiz-QRCode.png`;
     a.click();
   };
 

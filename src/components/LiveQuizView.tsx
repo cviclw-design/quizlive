@@ -468,11 +468,11 @@ export const LiveQuizView: React.FC<LiveQuizViewProps> = ({
                 ONLINE LIVE QUIZ
               </span>
               <span className="text-[11px] text-amber-400 font-bold hidden sm:inline">
-                CLW VAW 2026
+                {liveState?.programmeName || 'ONLINE LIVE QUIZ'}
               </span>
             </div>
             <h1 className="text-base sm:text-xl font-bold font-serif text-white tracking-wide">
-              Chittaranjan Locomotive Works
+              {liveState?.organizationName || 'Chittaranjan Locomotive Works (CLW)'}
             </h1>
             <p className="text-[11px] text-amber-200/90 hidden sm:block">
               {liveState?.sloganHindi || 'सत्यनिष्ठा की संस्कृति से राष्ट्र की समृद्धि'} · {liveState?.sloganEnglish || "Culture of Integrity for Nation's Prosperity"}

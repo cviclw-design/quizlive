@@ -156,23 +156,26 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
         ctx.fillText('INDIAN RAILWAYS', 360, 210);
 
         ctx.fillStyle = '#071a3a';
-        ctx.font = '800 48px Georgia, serif';
-        ctx.fillText('Chittaranjan Locomotive Works', 360, 268);
+        ctx.font = '800 44px Georgia, serif';
+        const displayOrg = cert.organization_name || 'Chittaranjan Locomotive Works';
+        ctx.fillText(displayOrg, 360, 268);
 
-        ctx.font = '600 26px Outfit, sans-serif';
+        ctx.font = '600 24px Outfit, sans-serif';
         ctx.fillStyle = '#445566';
-        ctx.fillText('Vigilance Department  ·  Chittaranjan', 360, 314);
+        const displayDept = cert.cvo_organization || 'Vigilance Department · Chittaranjan';
+        ctx.fillText(displayDept, 360, 314);
 
         // Ribbon
         ctx.beginPath();
-        roundRect(ctx, 620, 350, 760, 52, 26);
+        roundRect(ctx, 550, 350, 900, 52, 26);
         ctx.fillStyle = '#071a3a';
         ctx.fill();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = '800 22px Outfit, sans-serif';
+        ctx.font = '800 20px Outfit, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('VIGILANCE AWARENESS WEEK 2026', 1000, 384);
+        const displayProg = (cert.programme_name || 'VIGILANCE AWARENESS WEEK 2026').toUpperCase();
+        ctx.fillText(displayProg.slice(0, 55), 1000, 384);
 
         // Certificate Title
         ctx.fillStyle = '#071a3a';
@@ -202,7 +205,7 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
         // Participation Statement
         ctx.fillStyle = '#334455';
         ctx.font = '500 24px Outfit, sans-serif';
-        const bodyText = 'has participated in the Online Quiz Competition organised by the Vigilance Department, Chittaranjan Locomotive Works, during Vigilance Awareness Week 2026.';
+        const bodyText = `has participated in the ${cert.programme_name || 'Online Quiz Competition'} organised by ${cert.cvo_organization || displayOrg}${cert.programme_period ? ` during ${cert.programme_period}` : ''}.`;
         wrapText(ctx, bodyText, 1000, 805, 1400, 34);
 
         // Score Box
@@ -537,18 +540,18 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
                   INDIAN RAILWAYS
                 </div>
                 <h1 className="text-xl sm:text-3xl font-serif font-bold text-[#071a3a] leading-tight">
-                  Chittaranjan Locomotive Works
+                  {cert.organization_name || 'Chittaranjan Locomotive Works'}
                 </h1>
                 <div className="text-xs text-slate-600 font-medium">
-                  Vigilance Department · Chittaranjan
+                  {cert.cvo_organization || 'Vigilance Department · Chittaranjan'}
                 </div>
               </div>
             </div>
 
-            {/* VAW Ribbon */}
+            {/* Event Ribbon */}
             <div className="my-2">
               <span className="inline-block px-5 py-1.5 bg-[#071a3a] text-white rounded-full text-xs font-bold tracking-widest uppercase shadow-xs">
-                VIGILANCE AWARENESS WEEK 2026
+                {cert.programme_name || 'VIGILANCE AWARENESS WEEK 2026'}
               </span>
             </div>
 
@@ -589,7 +592,7 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
 
             {/* Body Paragraph */}
             <p className="max-w-2xl mx-auto text-xs sm:text-sm text-slate-700 leading-relaxed mt-2 mb-6">
-              has participated in the Online Quiz Competition organised by the Vigilance Department, Chittaranjan Locomotive Works, during Vigilance Awareness Week 2026.
+              has participated in the {cert.programme_name || 'Online Quiz Competition'} organised by {cert.cvo_organization || cert.organization_name || 'Vigilance Department'}{cert.programme_period ? ` during ${cert.programme_period}` : ''}.
             </p>
 
             {/* Score & Participation Bar */}

@@ -39,6 +39,12 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'live' | 'guidelines' | 'schedule' | 'register' | 'login' | 'quiz' | 'certificate' | 'admin'>('home');
   const [homeData, setHomeData] = useState<PublicHomeData | null>(null);
   const [leaderboard, setLeaderboard] = useState<PublicLeaderboardItem[]>([]);
+  const [leaderboardInfo, setLeaderboardInfo] = useState<{
+    mode: 'live' | 'last_completed' | 'none';
+    status?: string;
+    sessionTitle?: string | null;
+    completedAt?: string;
+  }>({ mode: 'none' });
   const [loadingHome, setLoadingHome] = useState(true);
   const [isMuted, setIsMuted] = useState<boolean>(() => soundEffects.getMuted());
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -112,6 +118,15 @@ export default function App() {
       const lbRes = await api.getLeaderboard().catch(() => null);
       if (lbRes && lbRes.ok) {
         setLeaderboard(lbRes.leaderboard || []);
+        setLeaderboardInfo({
+          mode: lbRes.mode || (lbRes.leaderboard && lbRes.leaderboard.length > 0 ? 'last_completed' : 'none'),
+          status: lbRes.status,
+          sessionTitle: lbRes.sessionTitle,
+          completedAt: lbRes.completedAt
+        });
+      } else {
+        setLeaderboard([]);
+        setLeaderboardInfo({ mode: 'none' });
       }
     } catch (err) {
       console.error('Failed to load home data', err);
@@ -119,6 +134,24 @@ export default function App() {
       setLoadingHome(false);
     }
   };
+
+  // Periodically refresh live quiz standings if on home page
+  useEffect(() => {
+    const timer = setInterval(() => {
+      api.getLeaderboard().then(lbRes => {
+        if (lbRes && lbRes.ok) {
+          setLeaderboard(lbRes.leaderboard || []);
+          setLeaderboardInfo({
+            mode: lbRes.mode || (lbRes.leaderboard && lbRes.leaderboard.length > 0 ? 'last_completed' : 'none'),
+            status: lbRes.status,
+            sessionTitle: lbRes.sessionTitle,
+            completedAt: lbRes.completedAt
+          });
+        }
+      }).catch(() => {});
+    }, 12000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleToggleSound = () => {
     const muted = soundEffects.toggleMute();
@@ -355,6 +388,12 @@ export default function App() {
   const contactPhone = homeData?.settings?.contact_phone || '0341-2525555 / Rly: 22000';
   const logoUrl = homeData?.settings?.logo_url || 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png';
 
+  useEffect(() => {
+    if (orgName && progName) {
+      document.title = `${orgName} · ${progName}`;
+    }
+  }, [orgName, progName]);
+
   return (
     <div className="min-h-screen bg-[#f4f7fb] text-slate-900 font-sans flex flex-col">
       {/* SWR / CLW Style Top Bar */}
@@ -452,13 +491,6 @@ export default function App() {
             <span>LIVE QUIZ</span>
           </button>
 
-          <button
-            onClick={() => setSearchPfModal(true)}
-            className="px-3 py-1.5 rounded-md whitespace-nowrap transition-colors flex items-center gap-1.5 text-white/80 hover:text-white"
-          >
-            <Award className="w-3.5 h-3.5 text-amber-300" />
-            <span>Find My Certificate</span>
-          </button>
 
           <button
             onClick={() => navigateTo('schedule')}
@@ -1172,84 +1204,92 @@ export default function App() {
               </div>
             </div>
 
-            {/* Enhanced Public Leaderboard Section */}
-            <div className="bg-white border border-[#eadcc4] rounded-2xl p-6 sm:p-8 shadow-sm mb-8">
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                    <Trophy className="w-5 h-5 text-amber-600" />
+            {/* Quiz Honour Roll & Leaderboard:
+                ONLY SHOW DURING LIVE QUIZ (mode === 'live') AND AFTER LIVE QUIZ (mode === 'last_completed')
+                WHEN DATA EXISTS. OTHERWISE HIDE COMPLETELY. */}
+            {(leaderboardInfo.mode === 'live' || leaderboardInfo.mode === 'last_completed') && leaderboard && leaderboard.length > 0 && (
+              <div className="bg-white border border-[#eadcc4] rounded-2xl p-6 sm:p-8 shadow-sm mb-8 animate-in fade-in duration-300">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                      <Trophy className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-serif font-bold text-[#071a3a]">
+                          Quiz Honour Roll &amp; Leaderboard
+                        </h3>
+                        {leaderboardInfo.mode === 'live' ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-sans font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                            <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                            Live Quiz in Progress
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-sans font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                            <Medal className="w-3.5 h-3.5 text-amber-600" />
+                            Last Quiz Honour Roll
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {leaderboardInfo.mode === 'live'
+                          ? `Real-time scores · ${leaderboardInfo.sessionTitle || 'Active Live Session'} · Ranked by Marks with Time-Taken Tiebreaker`
+                          : `Official Results of Last Live Quiz · ${leaderboardInfo.sessionTitle || 'Live Quiz'}${leaderboardInfo.completedAt ? ` · Concluded on ${new Date(leaderboardInfo.completedAt).toLocaleDateString()} at ${new Date(leaderboardInfo.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-serif font-bold text-[#071a3a] flex items-center gap-2">
-                      <span>Quiz Honour Roll &amp; Leaderboard</span>
-                      <span className="text-xs font-sans font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                        Top Performers
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Ranked by Maximum Marks with Time-Taken Seniority Tiebreaker
-                    </p>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={loadHomeData}
+                      className="px-3 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold"
+                      title="Refresh Leaderboard"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Refresh</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => navigateTo('live')}
-                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>Live Quiz Room</span>
-                  </button>
-                  <button
-                    onClick={loadHomeData}
-                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
-                    title="Refresh Leaderboard"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Leaderboard Podium for Top 3 */}
-              {leaderboard && leaderboard.length >= 3 && (
-                <div className="grid grid-cols-3 gap-3 max-w-lg mx-auto mb-8 pt-4">
-                  {/* Rank 2 */}
-                  <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs mb-1">
-                      🥈 2
+                {/* Leaderboard Podium for Top 3 */}
+                {leaderboard.length >= 3 && (
+                  <div className="grid grid-cols-3 gap-3 max-w-lg mx-auto mb-8 pt-4">
+                    {/* Rank 2 */}
+                    <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs mb-1">
+                        🥈 2
+                      </div>
+                      <div className="font-bold text-xs text-slate-800 truncate w-full">{leaderboard[1].name}</div>
+                      <div className="text-[10px] text-slate-500 truncate w-full">{leaderboard[1].department}</div>
+                      <div className="mt-1 font-mono text-xs font-extrabold text-blue-900">{leaderboard[1].score} pts</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{leaderboard[1].duration_seconds}s</div>
                     </div>
-                    <div className="font-bold text-xs text-slate-800 truncate w-full">{leaderboard[1].name}</div>
-                    <div className="text-[10px] text-slate-500 truncate w-full">{leaderboard[1].department}</div>
-                    <div className="mt-1 font-mono text-xs font-extrabold text-blue-900">{leaderboard[1].score} pts</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{leaderboard[1].duration_seconds}s</div>
-                  </div>
 
-                  {/* Rank 1 */}
-                  <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-gradient-to-b from-amber-50 to-amber-100/70 border-2 border-amber-300 shadow-xs -translate-y-2">
-                    <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-sm mb-1 shadow-xs">
-                      🥇 1
+                    {/* Rank 1 */}
+                    <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-gradient-to-b from-amber-50 to-amber-100/70 border-2 border-amber-300 shadow-xs -translate-y-2">
+                      <div className="w-9 h-9 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-sm mb-1 shadow-xs">
+                        🥇 1
+                      </div>
+                      <div className="font-bold text-xs text-slate-900 truncate w-full">{leaderboard[0].name}</div>
+                      <div className="text-[10px] text-amber-800 font-medium truncate w-full">{leaderboard[0].department}</div>
+                      <div className="mt-1 font-mono text-xs font-extrabold text-amber-700">{leaderboard[0].score} pts</div>
+                      <div className="text-[10px] text-slate-500 font-mono">{leaderboard[0].duration_seconds}s</div>
                     </div>
-                    <div className="font-bold text-xs text-slate-900 truncate w-full">{leaderboard[0].name}</div>
-                    <div className="text-[10px] text-amber-800 font-medium truncate w-full">{leaderboard[0].department}</div>
-                    <div className="mt-1 font-mono text-xs font-extrabold text-amber-700">{leaderboard[0].score} pts</div>
-                    <div className="text-[10px] text-slate-500 font-mono">{leaderboard[0].duration_seconds}s</div>
-                  </div>
 
-                  {/* Rank 3 */}
-                  <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-amber-50/40 border border-amber-200">
-                    <div className="w-8 h-8 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-xs mb-1">
-                      🥉 3
+                    {/* Rank 3 */}
+                    <div className="flex flex-col items-center justify-end text-center p-3 rounded-xl bg-amber-50/40 border border-amber-200">
+                      <div className="w-8 h-8 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center font-bold text-xs mb-1">
+                        🥉 3
+                      </div>
+                      <div className="font-bold text-xs text-slate-800 truncate w-full">{leaderboard[2].name}</div>
+                      <div className="text-[10px] text-slate-500 truncate w-full">{leaderboard[2].department}</div>
+                      <div className="mt-1 font-mono text-xs font-extrabold text-blue-900">{leaderboard[2].score} pts</div>
+                      <div className="text-[10px] text-slate-400 font-mono">{leaderboard[2].duration_seconds}s</div>
                     </div>
-                    <div className="font-bold text-xs text-slate-800 truncate w-full">{leaderboard[2].name}</div>
-                    <div className="text-[10px] text-slate-500 truncate w-full">{leaderboard[2].department}</div>
-                    <div className="mt-1 font-mono text-xs font-extrabold text-blue-900">{leaderboard[2].score} pts</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{leaderboard[2].duration_seconds}s</div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Leaderboard Table */}
-              {leaderboard && leaderboard.length > 0 ? (
+                {/* Leaderboard Table */}
                 <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
                   <table className="w-full text-left">
                     <thead className="bg-[#071a3a] text-white">
@@ -1300,21 +1340,8 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  Leaderboard will populate as participants complete the competition.
-                </div>
-              )}
-            </div>
-
-            {/* Department chips */}
-            <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-slate-600">
-              {departmentsList.map((dept, index) => (
-                <span key={`dept-chip-${dept}-${index}`} className="bg-white border border-[#eadcc4] px-3 py-1.5 rounded-full shadow-2xs">
-                  {dept}
-                </span>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -1511,6 +1538,14 @@ export default function App() {
       <ShareModal
         isOpen={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
+        orgName={orgName}
+        progName={progName}
+        progPeriod={progPeriod}
+        cvoName={cvoName}
+        cvoDesig={cvoDesig}
+        cvoOrg={cvoOrg}
+        sloganHindi={homeData?.settings?.slogan_hindi}
+        sloganEnglish={homeData?.settings?.slogan_english}
       />
 
       {/* Google Drive Cloud Storage Modal */}

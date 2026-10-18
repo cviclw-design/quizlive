@@ -53,6 +53,9 @@ export const CertificateView: React.FC<CertificateProps> = ({
   const [cvoName, setCvoName] = useState<string>(initialCvoName || 'Sugind Surendran');
   const [cvoDesignation, setCvoDesignation] = useState<string>(initialCvoDesig || 'SDGM & Chief Vigilance Officer');
   const [cvoOrganization, setCvoOrganization] = useState<string>(initialCvoOrg || 'Chittaranjan Locomotive Works, Chittaranjan');
+  const [organizationName, setOrganizationName] = useState<string>('Chittaranjan Locomotive Works');
+  const [programmeName, setProgrammeName] = useState<string>('Vigilance Awareness Week 2026');
+  const [programmePeriod, setProgrammePeriod] = useState<string>('2026');
   const [sloganHindi, setSloganHindi] = useState<string>(initialSloganHi || 'सत्यनिष्ठा से समृद्धि');
   const [sloganEnglish, setSloganEnglish] = useState<string>(initialSloganEn || 'Probity for Prosperity');
 
@@ -67,6 +70,9 @@ export const CertificateView: React.FC<CertificateProps> = ({
         if (res.settings.cvo_name) setCvoName(res.settings.cvo_name);
         if (res.settings.cvo_designation) setCvoDesignation(res.settings.cvo_designation);
         if (res.settings.cvo_organization) setCvoOrganization(res.settings.cvo_organization);
+        if (res.settings.organization_name) setOrganizationName(res.settings.organization_name);
+        if (res.settings.programme_name) setProgrammeName(res.settings.programme_name);
+        if (res.settings.programme_period) setProgrammePeriod(res.settings.programme_period);
         if (res.settings.slogan_hindi) setSloganHindi(res.settings.slogan_hindi);
         if (res.settings.slogan_english) setSloganEnglish(res.settings.slogan_english);
       }
@@ -239,22 +245,22 @@ export const CertificateView: React.FC<CertificateProps> = ({
       ctx.fillText('CENTRAL VIGILANCE COMMISSION  ·  INDIAN RAILWAYS', W / 2, 160);
 
       ctx.fillStyle = '#071a3a';
-      ctx.font = '800 46px Georgia, serif';
-      ctx.fillText('Chittaranjan Locomotive Works', W / 2, 215);
+      ctx.font = '800 44px Georgia, serif';
+      ctx.fillText(organizationName, W / 2, 215);
 
       ctx.font = '600 22px Outfit, sans-serif';
       ctx.fillStyle = '#556677';
-      ctx.fillText('Vigilance Department  ·  Chittaranjan', W / 2, 250);
+      ctx.fillText(cvoOrganization, W / 2, 250);
 
-      // VAW Ribbon
+      // Ribbon
       ctx.beginPath();
-      roundRect(ctx, W / 2 - 380, 280, 760, 48, 24);
+      roundRect(ctx, W / 2 - 420, 280, 840, 48, 24);
       ctx.fillStyle = '#071a3a';
       ctx.fill();
 
       ctx.fillStyle = '#ffffff';
       ctx.font = '800 20px Outfit, sans-serif';
-      ctx.fillText('VIGILANCE AWARENESS WEEK 2026', W / 2, 312);
+      ctx.fillText(programmeName.toUpperCase().slice(0, 55), W / 2, 312);
 
       // Current Year Official Slogan
       ctx.fillStyle = '#8a6a12';
@@ -477,16 +483,16 @@ export const CertificateView: React.FC<CertificateProps> = ({
                 CENTRAL VIGILANCE COMMISSION · INDIAN RAILWAYS
               </div>
               <h1 className="text-xl sm:text-3xl font-serif font-bold text-[#071a3a] leading-tight">
-                Chittaranjan Locomotive Works
+                {organizationName}
               </h1>
               <div className="text-xs text-slate-600 font-medium">
-                Vigilance Department · Chittaranjan
+                {cvoOrganization}
               </div>
 
-              {/* VAW Ribbon */}
+              {/* Event Ribbon */}
               <div className="my-2.5">
                 <span className="inline-block px-5 py-1 bg-[#071a3a] text-white rounded-full text-xs font-bold tracking-widest uppercase shadow-xs">
-                  VIGILANCE AWARENESS WEEK 2026
+                  {programmeName}
                 </span>
               </div>
 

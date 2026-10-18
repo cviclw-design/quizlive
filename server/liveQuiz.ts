@@ -932,7 +932,10 @@ class LiveQuizManager {
       autoAdvance: this.autoAdvance,
       reviewStartTime: this.reviewStartTime,
       sloganHindi: settings.slogan_hindi || 'सत्यनिष्ठा से समृद्धि',
-      sloganEnglish: settings.slogan_english || 'Probity for Prosperity'
+      sloganEnglish: settings.slogan_english || 'Probity for Prosperity',
+      organizationName: settings.organization_name || 'Chittaranjan Locomotive Works (CLW)',
+      programmeName: settings.programme_name || 'Vigilance Awareness Week 2026 Quiz Competition',
+      programmePeriod: settings.programme_period || '2026'
     };
   }
 
