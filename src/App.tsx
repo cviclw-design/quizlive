@@ -498,7 +498,7 @@ export default function App() {
               currentPage === 'schedule' ? 'bg-white text-[#071a3a] shadow-xs' : 'text-white/80 hover:text-white'
             }`}
           >
-            Common Schedule
+            Schedule
           </button>
 
           <button
@@ -676,7 +676,7 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 text-xs text-slate-700">
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">1. Live Scheduled Competition:</strong>
-                  All quizzes are conducted LIVE as per the official department &amp; common schedule. Exactly one attempt per unique PF number.
+                  All quizzes are conducted LIVE as per the official department &amp; schedule. Exactly one attempt per unique PF number.
                 </div>
                 <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/40">
                   <strong className="text-[#071a3a] block mb-1">2. Questions &amp; Marks:</strong>
@@ -740,7 +740,7 @@ export default function App() {
           </div>
         )}
 
-        {/* --- PAGE: COMMON SCHEDULE (Unified for all departments) --- */}
+        {/* --- PAGE: SCHEDULE (Unified for all departments) --- */}
         {currentPage === 'schedule' && (
           <div className="max-w-4xl mx-auto py-8 px-4">
             <div className="bg-white border border-[#eadcc4] rounded-2xl p-6 sm:p-8 shadow-sm">
@@ -753,7 +753,7 @@ export default function App() {
                     Common Programme Schedule
                   </h2>
                   <p className="text-xs text-slate-500">
-                    Common Schedule open simultaneously for all Departments &amp; Units
+                    Schedule open simultaneously for all Departments &amp; Units
                   </p>
                 </div>
               </div>
@@ -1399,11 +1399,7 @@ export default function App() {
           {/* Top Brand Banner of Bottom Plate */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 pb-6 border-b border-slate-200">
             <div className="flex items-center gap-3.5 text-center md:text-left">
-              <img
-                src={logoUrl}
-                alt="Emblem"
-                className="w-12 h-12 object-contain rounded-full bg-white p-1 border-2 border-[#d4a017] shadow-xs shrink-0"
-              />
+              
               <div>
                 <div className="text-sm sm:text-base font-black uppercase tracking-wider text-[#071a3a] drop-shadow-2xs">
                   {orgName}
@@ -1453,72 +1449,12 @@ export default function App() {
             </div>
           </div>
 
-          {/* Detailed Info Grid: Competent Authority, Address & Contact Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-xs">
-            {/* Authority Plate */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
-              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
-                <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                <span>Competent Vigilance Authority</span>
-              </div>
-              <div className="text-slate-800 text-sm font-extrabold">
-                Shri {cvoName}
-              </div>
-              <div className="text-slate-600 font-semibold">
-                {cvoDesig}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {cvoOrg || orgName}
-              </div>
-            </div>
-
-            {/* Official Contact & Address Plate */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
-              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
-                <MapPin className="w-4 h-4 text-rose-600" />
-                <span>Official Department Address</span>
-              </div>
-              <p className="text-slate-700 leading-relaxed font-medium">
-                {contactAddress}
-              </p>
-              <div className="text-[11px] text-slate-500 pt-1">
-                Programme Period: <strong className="text-slate-800">{progPeriod}</strong>
-              </div>
-            </div>
-
-            {/* Communication & Helpline Plate */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-2 sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center gap-2 text-blue-950 font-bold uppercase tracking-wider text-[11px] pb-1 border-b border-slate-100">
-                <Mail className="w-4 h-4 text-blue-700" />
-                <span>Helpline &amp; Assistance</span>
-              </div>
-              <div className="space-y-1.5 pt-0.5">
-                <div className="flex items-center gap-2 text-slate-700">
-                  <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>Email:</span>
-                  <a href={`mailto:${contactEmail}`} className="font-semibold text-blue-900 hover:underline">
-                    {contactEmail}
-                  </a>
-                </div>
-                <div className="flex items-center gap-2 text-slate-700">
-                  <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>Phone / Rly:</span>
-                  <span className="font-semibold text-slate-800 font-mono">
-                    {contactPhone}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
-                  <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>Departments Covered: <strong className="text-slate-800">{departmentsList.length}</strong> · Units: <strong className="text-slate-800">{unitsList.length}</strong></span>
-                </div>
-              </div>
-            </div>
-          </div>
+          
 
           {/* Bottom Copyright & Government Portals Notice */}
           <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-slate-500 text-center sm:text-left">
             <div>
-              © 2026 <strong className="font-bold text-slate-800">{orgName}</strong> · Vigilance Organisation. All rights reserved.
+              © 2026 <strong className="font-bold text-slate-800">{orgName}</strong> · Vigilance Department. All rights reserved.
             </div>
             <div className="flex items-center gap-3 font-medium">
               <span className="text-slate-600">Probity for Prosperity</span>
