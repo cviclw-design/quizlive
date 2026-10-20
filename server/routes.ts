@@ -105,8 +105,14 @@ apiRouter.post('/user/login', (req, res) => {
       designation: p.designation,
       department: p.department,
       unit: p.unit_name,
-      mobile: p.mobile
+      mobile: p.mobile,
+      status: p.status || 'active',
+      quit_at: p.quit_at,
+      quit_reason: p.quit_reason,
+      readmission_requested_at: p.readmission_requested_at
     },
+    isQuit: p.status === 'quit',
+    isPendingApproval: p.status === 'pending_approval',
     attempt: attempt ? {
       id: attempt.id,
       status: attempt.status,
@@ -116,6 +122,111 @@ apiRouter.post('/user/login', (req, res) => {
       duration_seconds: attempt.duration_seconds,
       submitted_at: attempt.submitted_at
     } : null
+  });
+});
+
+// Participant Quit Quiz Permanently
+apiRouter.post('/user/quit_permanently', (req, res) => {
+  const { pf, reason } = req.body || {};
+  const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!cleanPf) {
+    res.status(422).json({ ok: false, error: 'PF Number is required.' });
+    return;
+  }
+
+  const result = db.quitParticipantPermanently(cleanPf, reason);
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+
+  res.json({
+    ok: true,
+    message: 'You have permanently quit the quiz. Re-admission requires approval from the Vigilance Administrator.',
+    participant: result.participant
+  });
+});
+
+// Participant Request Re-admission
+apiRouter.post('/user/request_readmission', (req, res) => {
+  const { pf, password, note } = req.body || {};
+  const cleanPf = String(pf || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!cleanPf) {
+    res.status(422).json({ ok: false, error: 'PF Number is required.' });
+    return;
+  }
+
+  const result = db.requestReadmission(cleanPf, password, note);
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+
+  res.json({
+    ok: true,
+    message: 'Re-admission request successfully submitted to the Vigilance Administrator.',
+    participant: result.participant
+  });
+});
+
+// Participant My Results and Attempted Questions (Protected - requires valid login credentials)
+apiRouter.get('/participant/my_results', (req, res) => {
+  const cleanPf = String(req.query?.pf || req.headers['x-participant-pf'] || '').trim().toUpperCase().replace(/\s+/g, '');
+  const password = String(req.query?.password || req.headers['x-participant-pass'] || '').trim();
+
+  if (!cleanPf) {
+    res.status(401).json({ ok: false, error: 'Authentication required. Please log in with your PF Number and Password.' });
+    return;
+  }
+
+  const p = db.getParticipantByPf(cleanPf);
+  if (!p) {
+    res.status(401).json({ ok: false, error: 'Participant not found.' });
+    return;
+  }
+
+  // Verify password
+  const curPass = (p.password || '123').trim();
+  if (password && password !== curPass) {
+    res.status(401).json({ ok: false, error: 'Incorrect password. Access denied.' });
+    return;
+  }
+
+  const attempt = db.getAttemptByParticipantId(p.id);
+  let questionsTrace: any[] = [];
+  if (attempt) {
+    const details = db.getAttemptDetails(attempt.id);
+    if (details) {
+      questionsTrace = details.questions;
+    }
+  }
+
+  res.json({
+    ok: true,
+    participant: {
+      id: p.id,
+      pf: p.pf_no,
+      name: p.name,
+      designation: p.designation,
+      department: p.department,
+      unit: p.unit_name,
+      mobile: p.mobile,
+      status: p.status || 'active',
+      quit_at: p.quit_at,
+      quit_reason: p.quit_reason,
+      readmission_requested_at: p.readmission_requested_at
+    },
+    attempt: attempt ? {
+      id: attempt.id,
+      status: attempt.status,
+      score: attempt.score,
+      max_score: attempt.max_score,
+      percentage: attempt.score !== null && attempt.max_score ? Math.round((attempt.score / attempt.max_score) * 100) : null,
+      rank: attempt.rank,
+      duration_seconds: attempt.duration_seconds,
+      submitted_at: attempt.submitted_at
+    } : null,
+    questions: questionsTrace
   });
 });
 
@@ -219,6 +330,18 @@ apiRouter.post('/start', (req, res) => {
 
   if (!participant) {
     res.status(404).json({ ok: false, error: 'Participant not found. Please register first.' });
+    return;
+  }
+
+  if (participant.status === 'quit' || participant.status === 'pending_approval') {
+    res.status(403).json({
+      ok: false,
+      error: participant.status === 'pending_approval'
+        ? 'Your re-admission request is currently pending Administrator approval.'
+        : 'You have permanently quit the quiz competition. Re-admission requires approval from the Vigilance Administrator.',
+      isQuit: true,
+      requiresApproval: true
+    });
     return;
   }
 
@@ -1315,4 +1438,41 @@ apiRouter.post('/admin/db/:table/delete', requireAdmin, (req, res) => {
   db.logAudit('admin', 'db_delete', `Deleted from ${req.params.table} ID ${id}`);
   res.json({ ok: true, message: 'Record deleted successfully.' });
 });
+
+// Admin Participant Re-admissions
+apiRouter.get('/admin/readmissions', requireAdmin, (_req, res) => {
+  const list = db.getPendingReadmissions();
+  res.json({ ok: true, readmissions: list });
+});
+
+apiRouter.post('/admin/readmissions/approve', requireAdmin, (req, res) => {
+  const { participant_id } = req.body || {};
+  const id = Number(participant_id);
+  if (!id) {
+    res.status(422).json({ ok: false, error: 'participant_id is required' });
+    return;
+  }
+  const result = db.approveReadmission(id, 'Vigilance Admin');
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json({ ok: true, message: 'Participant re-admission approved successfully.', participant: result.participant });
+});
+
+apiRouter.post('/admin/readmissions/reject', requireAdmin, (req, res) => {
+  const { participant_id, reason } = req.body || {};
+  const id = Number(participant_id);
+  if (!id) {
+    res.status(422).json({ ok: false, error: 'participant_id is required' });
+    return;
+  }
+  const result = db.rejectReadmission(id, 'Vigilance Admin', reason);
+  if (!result.ok) {
+    res.status(400).json(result);
+    return;
+  }
+  res.json({ ok: true, message: 'Participant re-admission rejected.' });
+});
+
 

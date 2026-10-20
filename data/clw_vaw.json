@@ -8,7 +8,6 @@
       "must_change": false,
       "created_at": "2026-10-14 07:31:45"
     }
-    
   ],
   "settings": {
     "cvo_name": "Sugind Surendran",
@@ -16,7 +15,7 @@
     "cvo_organization": "Chittaranjan Locomotive Works, Chittaranjan",
     "signature_photo": null,
     "seal_text": "CLW\nVIGILANCE\nCHITTARANJAN",
-    "logo_url": "https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png",
+    "logo_url": "https://clw.indianrailways.gov.in/images/18%20star.png",
     "quiz_seconds": 30,
     "quiz_count": 20,
     "enforce_schedule": false,
@@ -28,7 +27,10 @@
     "organization_name": "Chittaranjan Locomotive Works (CLW)",
     "programme_name": "Vigilance Awareness Week 2026 Quiz Competition",
     "programme_period": "27th October to 2nd November 2026",
-    "registration_enabled": true
+    "registration_enabled": true,
+    "contact_address": "Vigilance Department, Administrative Building, PO Chittaranjan, Pin 713331, Dist. Paschim Bardhaman, West Bengal",
+    "contact_email": "cviclw@gmail.com",
+    "contact_phone": "0341-2525555 / Rly: 22000"
   },
   "questions": [
     {
@@ -370,8 +372,6 @@
       "created_at": "2026-10-15 00:00:00"
     }
   ],
-  
-    
   "attempts": [
     {
       "id": 1,
@@ -420,6 +420,62 @@
   ],
   "audit_log": [
     {
+      "id": 11,
+      "created_at": "2026-10-20 19:17:34",
+      "actor": "admin",
+      "action": "db_delete",
+      "detail": "Deleted from participants ID 3",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 10,
+      "created_at": "2026-10-20 19:17:29",
+      "actor": "TESTPF99",
+      "action": "quiz_start",
+      "detail": "Electrical / 20 questions",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 9,
+      "created_at": "2026-10-20 19:17:24",
+      "actor": "TESTPF99",
+      "action": "readmission_approved",
+      "detail": "Approved by Vigilance Admin (prev: Personal emergency | Note: Ready to participate now)",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 8,
+      "created_at": "2026-10-20 19:17:16",
+      "actor": "admin",
+      "action": "admin_login",
+      "detail": "Login successful",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 7,
+      "created_at": "2026-10-20 19:17:11",
+      "actor": "TESTPF99",
+      "action": "readmission_requested",
+      "detail": "Ready to participate now",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 6,
+      "created_at": "2026-10-20 19:17:02",
+      "actor": "TESTPF99",
+      "action": "participant_quit_permanently",
+      "detail": "Personal emergency",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": 5,
+      "created_at": "2026-10-20 19:16:40",
+      "actor": "TESTPF99",
+      "action": "participant_register",
+      "detail": "Shri Test Kumar / Electrical / CLW Workshop",
+      "ip": "127.0.0.1"
+    },
+    {
       "id": 4,
       "created_at": "2026-10-14 17:04:01",
       "actor": "admin",
@@ -455,9 +511,9 @@
   "seq": {
     "admin": 2,
     "question": 20,
-    "participant": 2,
-    "attempt": 2,
-    "audit": 4
+    "participant": 3,
+    "attempt": 3,
+    "audit": 11
   },
   "departments": [
     "Personnel",
@@ -488,5 +544,7 @@
     "Works Office",
     "Engineering"
   ],
-  "live_sessions": []
+  "live_sessions": [],
+  "participants": [],
+  "schedules": []
 }

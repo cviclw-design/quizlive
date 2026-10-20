@@ -128,7 +128,7 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
       logoImg.crossOrigin = 'anonymous';
       logoImg.onload = () => finishCanvasPaint(logoImg);
       logoImg.onerror = () => finishCanvasPaint(null);
-      logoImg.src = cert.logo_url || 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png';
+      logoImg.src = cert.logo_url || 'https://clw.indianrailways.gov.in/images/18%20star.png';
 
       function finishCanvasPaint(logo: HTMLImageElement | null) {
         if (!ctx) return;
@@ -239,30 +239,20 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
         ctx.fillText('CHITTARANJAN', 280, 1250);
         ctx.restore();
 
-        // Right: Signature Block (Using uploaded photo if available)
-        if (cert.signature_photo) {
-          const sigImg = new Image();
-          sigImg.crossOrigin = 'anonymous';
-          sigImg.onload = () => {
-            ctx.drawImage(sigImg, 1340, 1100, 240, 85);
-            drawSignText();
-          };
-          sigImg.onerror = () => {
-            drawScriptFallback();
-            drawSignText();
-          };
-          sigImg.src = cert.signature_photo;
-        } else {
-          drawScriptFallback();
-          drawSignText();
-        }
+        // Right: Official Digitally Authorized Sign-off Block
+        drawScriptFallback();
+        drawSignText();
 
         function drawScriptFallback() {
           if (!ctx) return;
           ctx.textAlign = 'center';
+          ctx.fillStyle = '#0b6b3a';
+          ctx.font = 'bold 18px Outfit, sans-serif';
+          ctx.fillText('✓ Sd/- Digitally Authorized', 1460, 1115);
+
           ctx.fillStyle = '#071a3a';
-          ctx.font = 'italic 48px Georgia, serif';
-          ctx.fillText(cert.cvo_name || 'Sugind Surendran', 1460, 1160);
+          ctx.font = 'italic bold 46px Georgia, serif';
+          ctx.fillText(cert.cvo_name || 'Sugind Surendran', 1460, 1165);
         }
 
         function drawSignText() {
@@ -531,7 +521,7 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
             {/* Header with Emblem */}
             <div className="flex items-center justify-center gap-4 text-left pt-4 mb-2">
               <img
-                src={cert.logo_url || 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png'}
+                src={cert.logo_url || 'https://clw.indianrailways.gov.in/images/18%20star.png'}
                 alt="Indian Railways Emblem"
                 className="w-16 h-16 sm:w-20 sm:h-20 object-contain rounded-full border-2 border-[#d4a017] bg-white p-1 shrink-0 shadow-xs"
               />
@@ -637,18 +627,13 @@ export const ClwCertificateView: React.FC<ClwCertificateViewProps> = ({ cert, on
 
               {/* Right: Signature Photo & Signatory */}
               <div className="text-center sm:text-right min-w-[240px]">
-                <div className="h-16 flex items-center justify-center sm:justify-end mb-1">
-                  {cert.signature_photo ? (
-                    <img
-                      src={cert.signature_photo || undefined}
-                      alt="SDGM & CVO Signature"
-                      className="max-h-16 max-w-[200px] object-contain pointer-events-none"
-                    />
-                  ) : (
-                    <div className="font-serif italic text-2xl text-[#071a3a] font-bold">
-                      {cert.cvo_name || 'Sugind Surendran'}
-                    </div>
-                  )}
+                <div className="h-16 flex flex-col items-center sm:items-end justify-center mb-1">
+                  <span className="text-[10px] font-mono font-bold tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    ✓ Sd/- Digitally Authorized
+                  </span>
+                  <div className="font-serif italic text-2xl text-[#071a3a] font-black mt-1">
+                    {cert.cvo_name || 'Sugind Surendran'}
+                  </div>
                 </div>
 
                 <div className="w-48 h-px bg-[#d4a017] mx-auto sm:ml-auto mb-1.5" />

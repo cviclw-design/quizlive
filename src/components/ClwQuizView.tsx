@@ -3,7 +3,7 @@ import { api, QuizQuestionData, CertificateData, ParticipantData } from '../serv
 import { soundEffects } from '../utils/audio';
 import { ClwCertificateView } from './ClwCertificateView';
 import confetti from 'canvas-confetti';
-import { AlertCircle, ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, RefreshCw, CheckCircle2, DoorClosed, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ClwQuizViewProps {
@@ -12,6 +12,7 @@ interface ClwQuizViewProps {
   initialSeconds: number;
   initialAnswers: Record<string, string>;
   onHome: () => void;
+  onQuit?: (reason?: string) => void;
 }
 
 export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
@@ -19,7 +20,8 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
   initialQuestions,
   initialSeconds = 45,
   initialAnswers = {},
-  onHome
+  onHome,
+  onQuit
 }) => {
   const [questions] = useState<QuizQuestionData[]>(initialQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -30,8 +32,31 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
   const [certificate, setCertificate] = useState<CertificateData | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
 
+  // Quit Permanently Modal State
+  const [showQuitModal, setShowQuitModal] = useState(false);
+  const [quitReason, setQuitReason] = useState('');
+  const [isQuitting, setIsQuitting] = useState(false);
+  const [quitError, setQuitError] = useState('');
+
   const currentQ = questions[currentIndex];
   const maxSeconds = initialSeconds || 45;
+
+  const handleConfirmQuit = async () => {
+    setIsQuitting(true);
+    setQuitError('');
+    try {
+      soundEffects.playClick();
+      await api.quitQuizPermanently(participant.pf, quitReason.trim() || 'Voluntarily quit quiz session');
+      if (onQuit) {
+        onQuit(quitReason.trim());
+      } else {
+        onHome();
+      }
+    } catch (err: any) {
+      setQuitError(err.message || 'Failed to quit quiz.');
+      setIsQuitting(false);
+    }
+  };
 
   // Question countdown timer
   useEffect(() => {
@@ -117,7 +142,7 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
           setCertificate(certRes.certificate);
         }
       } catch {
-        alert('Assessment submitted! Refreshing certificate.');
+        // Proceed gracefully without popup
       }
     } finally {
       setIsSubmitting(false);
@@ -253,19 +278,30 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
         )}
 
         {/* Actions Bar */}
-        <div className="flex items-center justify-between gap-4 pt-4 border-t border-[#eadcc4]">
-          <button
-            type="button"
-            onClick={() => handleGrade('skip')}
-            className="px-4 py-2.5 rounded-xl border border-[#eadcc4] text-xs font-bold text-[#071a3a] bg-white hover:bg-slate-50 transition-colors"
-          >
-            Not Answering (Skip: 0 Marks)
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-[#eadcc4]">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleGrade('skip')}
+              className="px-4 py-2.5 rounded-xl border border-[#eadcc4] text-xs font-bold text-[#071a3a] bg-white hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Not Answering (Skip: 0 Marks)
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowQuitModal(true)}
+              className="px-3 py-2.5 rounded-xl border border-red-300 text-xs font-bold text-red-700 bg-red-50/60 hover:bg-red-100 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Quit from competition permanently"
+            >
+              <DoorClosed className="w-3.5 h-3.5 text-red-600" />
+              <span>Quit Quiz Permanently</span>
+            </button>
+          </div>
 
           <button
             type="button"
             onClick={() => handleGrade('answer')}
-            className="px-6 py-2.5 rounded-xl bg-[#128a45] hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+            className="px-6 py-2.5 rounded-xl bg-[#128a45] hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer ml-auto"
           >
             <span>{currentIndex === questions.length - 1 ? 'Submit Final Paper' : 'Submit Answer'}</span>
           </button>
@@ -276,6 +312,83 @@ export const ClwQuizView: React.FC<ClwQuizViewProps> = ({
           Scoring Rule: +100 for Correct Answer · −50 for Negative / Wrong Answer · 0 for "Not Answering (Skip)". You can change your choice freely before clicking submit or timer expires.
         </div>
       </div>
+
+      {/* ===================================================================
+          CONFIRM PERMANENT QUIT MODAL (STRICT ADMIN APPROVAL REQUIREMENT)
+          =================================================================== */}
+      {showQuitModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border-2 border-red-400 rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-lg font-serif font-black text-center text-red-950">
+              Quit Quiz Permanently?
+            </h3>
+
+            <div className="mt-3 p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 space-y-1.5">
+              <div className="font-bold text-red-950 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Permanent Forfeiture & Account Lock Warning</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-[11px] leading-relaxed text-red-800">
+                <li>Your active quiz session will be <strong>permanently terminated and forfeited</strong>.</li>
+                <li>Your PF Number (<strong>{participant.pf}</strong>) will be <strong>locked</strong> immediately.</li>
+                <li>You will <strong>NOT</strong> be allowed to log in or take the quiz again without <strong>explicit administrative approval</strong> from the Vigilance Officer.</li>
+              </ul>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Reason for Quitting (Required for Admin Review):
+              </label>
+              <textarea
+                value={quitReason}
+                onChange={e => setQuitReason(e.target.value)}
+                placeholder="State your reason (e.g. Urgent official call, technical failure, health issue, etc.)"
+                rows={2}
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-600 bg-slate-50"
+              />
+            </div>
+
+            {quitError && (
+              <div className="mt-2 text-xs text-red-600 font-semibold">
+                {quitError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 mt-6 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowQuitModal(false)}
+                disabled={isQuitting}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                No, Resume Quiz
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmQuit}
+                disabled={isQuitting}
+                className="flex-1 py-2.5 rounded-xl bg-red-700 hover:bg-red-800 text-white text-xs font-bold shadow-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {isQuitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing Exit...</span>
+                  </>
+                ) : (
+                  <>
+                    <DoorClosed className="w-3.5 h-3.5" />
+                    <span>Yes, Quit Permanently</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

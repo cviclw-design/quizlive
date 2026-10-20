@@ -41,13 +41,17 @@ export interface ParticipantItem {
   unit_name: string;
   mobile: string;
   password?: string; // Default '123'
+  status?: 'active' | 'quit' | 'pending_approval';
+  quit_at?: string;
+  quit_reason?: string;
+  readmission_requested_at?: string;
   created_at: string;
 }
 
 export interface AttemptItem {
   id: number;
   participant_id: number;
-  status: 'started' | 'submitted';
+  status: 'started' | 'submitted' | 'forfeited';
   started_at: string;
   submitted_at: string | null;
   score: number | null;
@@ -501,7 +505,7 @@ class Database {
         registration_enabled: true,
         signature_photo: null, // Will store uploaded signature photo base64
         seal_text: 'CLW\nVIGILANCE\nCHITTARANJAN',
-        logo_url: 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png',
+        logo_url: 'https://clw.indianrailways.gov.in/images/18%20star.png',
         quiz_seconds: 45,
         quiz_count: 20,
         enforce_schedule: false,
@@ -802,6 +806,86 @@ class Database {
       return { ok: false, error: 'Current password is incorrect.' };
     }
     p.password = newPassword.trim();
+    this.persist();
+    return { ok: true };
+  }
+
+  // --- Participant Quit & Re-admission Workflow ---
+  public quitParticipantPermanently(pf: string, reason?: string): { ok: boolean; error?: string; participant?: ParticipantItem } {
+    const cleanPf = pf.trim().toUpperCase();
+    const p = this.getParticipantByPf(cleanPf);
+    if (!p) return { ok: false, error: 'Participant not found.' };
+
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    p.status = 'quit';
+    p.quit_at = now;
+    p.quit_reason = reason?.trim() || 'Voluntarily quit quiz competition';
+
+    // If participant has a started (incomplete) attempt, forfeit it
+    const attempt = this.getAttemptByParticipantId(p.id);
+    if (attempt && attempt.status === 'started') {
+      attempt.status = 'forfeited';
+      attempt.submitted_at = now;
+    }
+
+    this.logAudit(cleanPf, 'participant_quit_permanently', p.quit_reason, '127.0.0.1');
+    this.persist();
+    return { ok: true, participant: p };
+  }
+
+  public requestReadmission(pf: string, password?: string, note?: string): { ok: boolean; error?: string; participant?: ParticipantItem } {
+    const cleanPf = pf.trim().toUpperCase();
+    const p = this.getParticipantByPf(cleanPf);
+    if (!p) return { ok: false, error: 'Participant not found.' };
+
+    if (password && (p.password || '123').trim() !== password.trim()) {
+      return { ok: false, error: 'Incorrect password.' };
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+    p.status = 'pending_approval';
+    p.readmission_requested_at = now;
+    if (note && note.trim()) {
+      p.quit_reason = p.quit_reason ? `${p.quit_reason} | Note: ${note.trim()}` : note.trim();
+    }
+
+    this.logAudit(cleanPf, 'readmission_requested', note?.trim() || 'Pending Admin Approval', '127.0.0.1');
+    this.persist();
+    return { ok: true, participant: p };
+  }
+
+  public getPendingReadmissions(): ParticipantItem[] {
+    return this.data.participants.filter(p => p.status === 'quit' || p.status === 'pending_approval');
+  }
+
+  public approveReadmission(participantId: number, adminUser: string = 'Admin'): { ok: boolean; error?: string; participant?: ParticipantItem } {
+    const p = this.getParticipantById(participantId);
+    if (!p) return { ok: false, error: 'Participant not found.' };
+
+    p.status = 'active';
+    const oldReason = p.quit_reason;
+    p.quit_reason = undefined;
+    p.quit_at = undefined;
+    p.readmission_requested_at = undefined;
+
+    // Reset forfeited attempt so they can start fresh
+    const attemptIdx = this.data.attempts.findIndex(a => a.participant_id === p.id && a.status === 'forfeited');
+    if (attemptIdx !== -1) {
+      this.data.attempts.splice(attemptIdx, 1);
+    }
+
+    this.logAudit(p.pf_no, 'readmission_approved', `Approved by ${adminUser} (prev: ${oldReason || 'Quit'})`, '127.0.0.1');
+    this.persist();
+    return { ok: true, participant: p };
+  }
+
+  public rejectReadmission(participantId: number, adminUser: string = 'Admin', reason?: string): { ok: boolean; error?: string } {
+    const p = this.getParticipantById(participantId);
+    if (!p) return { ok: false, error: 'Participant not found.' };
+
+    p.status = 'quit';
+    p.quit_reason = reason?.trim() || 'Re-admission rejected by Admin';
+    this.logAudit(p.pf_no, 'readmission_rejected', `Rejected by ${adminUser}: ${p.quit_reason}`, '127.0.0.1');
     this.persist();
     return { ok: true };
   }

@@ -33,7 +33,9 @@ import {
   Trophy,
   Flame,
   Eye,
-  ExternalLink
+  ExternalLink,
+  UserCheck,
+  UserX
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -44,7 +46,7 @@ interface AdminPanelProps {
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdated }) => {
   const [admin, setAdmin] = useState<{ id: number; username: string; display_name: string; must_change: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'live' | 'questions' | 'signature' | 'dept_units' | 'dbtables' | 'schedule' | 'results' | 'audit' | 'password'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'live' | 'questions' | 'settings' | 'readmissions' | 'dept_units' | 'dbtables' | 'schedule' | 'results' | 'audit' | 'password'>('dashboard');
   const [shareOpen, setShareOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
 
@@ -90,6 +92,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
   // Attempt Trace Inspection State
   const [inspectAttemptModal, setInspectAttemptModal] = useState<any | null>(null);
   const [inspectLoading, setInspectLoading] = useState(false);
+
+  // Participant Re-admission & Lock State
+  const [readmissions, setReadmissions] = useState<any[]>([]);
+  const [readmissionLoading, setReadmissionLoading] = useState<boolean>(false);
+  const [readmissionActionMsg, setReadmissionActionMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
   // Login form state
   const [loginUser, setLoginUser] = useState('admin');
@@ -221,8 +228,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       if (st.ok) {
         setSettings(st.settings);
       }
+      await loadReadmissions();
     } catch (err) {
       console.error('Failed loading dashboard data', err);
+    }
+  };
+
+  const loadReadmissions = async () => {
+    setReadmissionLoading(true);
+    try {
+      const res = await api.adminGetReadmissions();
+      if (res.ok) {
+        setReadmissions(res.readmissions || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to load readmissions:', err);
+    } finally {
+      setReadmissionLoading(false);
+    }
+  };
+
+  const handleApproveReadmission = async (participantId: number, pf: string) => {
+    try {
+      soundEffects.playClick();
+      const res = await api.adminApproveReadmission(participantId);
+      if (res.ok) {
+        setReadmissionActionMsg({ text: `Re-admission approved for PF ${pf}. Participant account unlocked and allowed to take quiz.`, isError: false });
+        await loadReadmissions();
+      }
+    } catch (err: any) {
+      setReadmissionActionMsg({ text: err.message || 'Approval failed', isError: true });
+    }
+  };
+
+  const handleRejectReadmission = async (participantId: number, pf: string) => {
+    const reason = window.prompt(`Enter rejection reason for PF ${pf}:`, 'Violated quiz rules');
+    if (!reason) return;
+    try {
+      soundEffects.playClick();
+      const res = await api.adminRejectReadmission(participantId, reason);
+      if (res.ok) {
+        setReadmissionActionMsg({ text: `Re-admission rejected for PF ${pf}.`, isError: false });
+        await loadReadmissions();
+      }
+    } catch (err: any) {
+      setReadmissionActionMsg({ text: err.message || 'Reject failed', isError: true });
     }
   };
 
@@ -234,6 +284,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
     setQuestionFormSuccess('');
     setSettingsSuccess('');
     setSettingsError('');
+    setReadmissionActionMsg(null);
 
     if (tab === 'dashboard') {
       loadDashboardData();
@@ -242,8 +293,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
       loadLiveSessions();
     } else if (tab === 'questions') {
       loadQuestions(selectedDeptFilter);
-    } else if (tab === 'signature') {
+    } else if (tab === 'settings') {
       loadSettings();
+    } else if (tab === 'readmissions') {
+      loadReadmissions();
     } else if (tab === 'dept_units') {
       loadDepartmentsAndUnits();
     } else if (tab === 'dbtables') {
@@ -1283,13 +1336,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
         </button>
 
         <button
-          onClick={() => handleTabChange('signature')}
+          onClick={() => handleTabChange('readmissions')}
           className={`px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-            activeTab === 'signature' ? 'bg-blue-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+            activeTab === 'readmissions' ? 'bg-blue-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          <ImageIcon className="w-3.5 h-3.5" />
-          <span>Settings &amp; Certificate</span>
+          <UserCheck className="w-3.5 h-3.5 text-amber-400" />
+          <span>Re-admissions ({readmissions.length})</span>
+          {readmissions.length > 0 && (
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+          )}
+        </button>
+
+        <button
+          onClick={() => handleTabChange('settings')}
+          className={`px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+            activeTab === 'settings' ? 'bg-blue-950 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>Settings &amp; Branding</span>
         </button>
 
         <button
@@ -1477,14 +1543,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
               </button>
 
               <button
-                onClick={() => handleTabChange('signature')}
+                onClick={() => handleTabChange('readmissions')}
                 className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 hover:bg-amber-50 text-left transition-colors flex items-center justify-between"
               >
                 <div>
-                  <div className="font-bold text-xs text-amber-950 mb-0.5">CVO Signature</div>
-                  <div className="text-[11px] text-slate-600">Upload signature photo</div>
+                  <div className="font-bold text-xs text-amber-950 mb-0.5 flex items-center gap-1.5">
+                    <span>Re-admissions</span>
+                    {readmissions.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px]">
+                        {readmissions.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-600">Review &amp; approve locked candidates</div>
                 </div>
-                <ImageIcon className="w-5 h-5 text-amber-800" />
+                <UserCheck className="w-5 h-5 text-amber-800" />
               </button>
 
               <button
@@ -2673,16 +2746,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
         </div>
       )}
 
-      {/* --- TAB 3: SIGNATURE & CERTIFICATE SETTINGS --- */}
-      {activeTab === 'signature' && settings && (
+      {/* --- TAB: MASTER SETTINGS & BRANDING --- */}
+      {activeTab === 'settings' && settings && (
         <div className="space-y-6">
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs">
             <div className="pb-4 border-b border-slate-200 mb-6">
               <h3 className="text-base font-bold text-slate-900">
-                SDGM &amp; CVO Signature &amp; Certificate Configuration
+                Master Configuration &amp; Branding Settings
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Upload the official signature photo of the SDGM &amp; Chief Vigilance Officer. This signature will automatically appear on all generated e-Certificates, Canvas PNG downloads, and prints.
+                Configure organization branding, themes, slogans, official CVO designation, and certificate templates.
               </p>
             </div>
 
@@ -2801,77 +2874,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
               </div>
 
-              {/* Signature Photo Section */}
-              <div className="p-5 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50/50">
-                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2">
-                  Official Signature Photo of SDGM &amp; CVO
-                </label>
-
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                  {/* Signature Preview Box */}
-                  <div className="w-72 h-32 bg-white border border-slate-300 rounded-xl shadow-xs flex flex-col items-center justify-center p-3 text-center relative overflow-hidden">
-                    {settings.signature_photo ? (
-                      <>
-                        <img
-                          src={settings.signature_photo}
-                          alt="SDGM & CVO Signature"
-                          className="max-h-20 max-w-full object-contain pointer-events-none"
-                        />
-                        <span className="text-[10px] text-emerald-700 font-semibold mt-1">
-                          ✓ Uploaded Signature Active
-                        </span>
-                      </>
-                    ) : (
-                      <div className="text-center">
-                        <div className="font-serif italic text-2xl text-blue-950">
-                          {settings.cvo_name || 'Sugind Surendran'}
-                        </div>
-                        <span className="text-[10px] text-slate-400 mt-1 block">
-                          (Default Scripted Font Active)
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Upload Controls */}
-                  <div className="flex-1 space-y-3">
-                    <p className="text-xs text-slate-600 leading-relaxed">
-                      Upload a clean photograph or scanned image of the SDGM signature (PNG with transparent background recommended, JPEG or SVG also supported).
-                    </p>
-
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      onChange={handleSignatureFileChange}
-                      className="hidden"
-                    />
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-950 hover:bg-blue-900 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>{settings.signature_photo ? 'Change Signature Photo' : 'Upload Signature Photo'}</span>
-                      </button>
-
-                      {settings.signature_photo && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveSignature}
-                          className="px-3 py-2 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
-                        >
-                          Remove Photo
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Programme & Organization Settings (Updates Dashboard & Certificates) */}
+                            {/* Programme & Organization Settings (Updates Dashboard & Certificates) */}
               <div className="p-5 border border-blue-200 rounded-xl bg-blue-50/40 space-y-4">
                 <div className="flex items-center gap-2">
                   <Building className="w-4 h-4 text-blue-900" />
@@ -2983,7 +2986,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Issuing Organization / Division
+                    Issuing Organization
                   </label>
                   <input
                     type="text"
@@ -2995,15 +2998,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
               </div>
 
-              {/* Office Address & Home Screen Bottom Plate Details */}
+              {/* Office Address */}
               <div className="pt-3 border-t border-slate-200 space-y-3">
                 <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span>Home Screen Bottom Plate &amp; Official Contact Information</span>
+                  <span>Official Contact Information</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Office / Department Address (Shown in Bottom Plate)
+                      Office Address (Shown in Bottom Plate)
                     </label>
                     <input
                       type="text"
@@ -3015,7 +3018,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Official Contact Email
+                      Official Email
                     </label>
                     <input
                       type="email"
@@ -3028,7 +3031,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Official Contact / Helpline Phone
+                    Official Contact
                   </label>
                   <input
                     type="text"
@@ -3083,30 +3086,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </div>
               </div>
 
-              {/* Universal Customization: Logo & Official Slogans */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-200">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Organization Logo URL (Railway / Department)
-                  </label>
-                  <input
-                    type="text"
-                    value={settings.logo_url || ''}
-                    onChange={e => setSettings({ ...settings, logo_url: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none"
-                  />
-                  <div className="flex gap-2 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setSettings({ ...settings, logo_url: 'https://raw.githubusercontent.com/swrvaw/swrvaw.github.io/gh-pages/static/media/logo.8b9ced028d0a93767ec0.png' })}
-                      className="text-[10px] text-blue-900 font-semibold hover:underline"
-                    >
-                      Use Railways Emblem
-                    </button>
-                  </div>
-                </div>
-
+              {/* Programme Slogans */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Programme Slogan (Hindi)
@@ -3144,6 +3125,136 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, onSettingsUpdat
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB: PARTICIPANT RE-ADMISSIONS APPROVALS --- */}
+      {activeTab === 'readmissions' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber-600" />
+                  <span>Participant Re-admission &amp; Lock Management</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Review participants who have voluntarily quit the quiz or whose accounts are locked. As Vigilance Administrator, you can grant re-admission so they can re-enter with their PF Number and Password.
+                </p>
+              </div>
+
+              <button
+                onClick={loadReadmissions}
+                disabled={readmissionLoading}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${readmissionLoading ? 'animate-spin' : ''}`} />
+                <span>Refresh List</span>
+              </button>
+            </div>
+
+            {readmissionActionMsg && (
+              <div
+                className={`mt-4 p-3.5 rounded-xl text-xs flex items-center gap-2 ${
+                  readmissionActionMsg.isError
+                    ? 'bg-red-50 border border-red-200 text-red-800'
+                    : 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                }`}
+              >
+                {readmissionActionMsg.isError ? (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                )}
+                <span>{readmissionActionMsg.text}</span>
+              </div>
+            )}
+
+            {readmissions.length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">
+                  No Pending Re-admission Requests
+                </h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  All registered participants are in active good standing. Any participant who voluntarily quits the quiz will appear here for your review and approval.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-6">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-700 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4">PF Number</th>
+                      <th className="py-3 px-4">Candidate Name</th>
+                      <th className="py-3 px-4">Designation &amp; Dept</th>
+                      <th className="py-3 px-4">Unit</th>
+                      <th className="py-3 px-4">Quit Date / Status</th>
+                      <th className="py-3 px-4">Recorded Reason</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {readmissions.map((p: any) => (
+                      <tr key={p.id} className="hover:bg-amber-50/30 transition-colors">
+                        <td className="py-3.5 px-4 font-mono font-bold text-blue-950">
+                          {p.pf_no}
+                        </td>
+                        <td className="py-3.5 px-4 font-semibold text-slate-900">
+                          {p.name}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          <div>{p.designation}</div>
+                          <div className="text-[10px] text-slate-400 font-medium">{p.department}</div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600">
+                          {p.unit_name}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="text-[11px] font-mono text-slate-700">
+                            {p.quit_at || p.readmission_requested_at || 'Recorded'}
+                          </div>
+                          <div>
+                            {p.status === 'pending_approval' ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                Approval Requested
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-300">
+                                Quit (Locked)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-700 max-w-xs truncate" title={p.quit_reason}>
+                          {p.quit_reason || 'Voluntarily quit quiz'}
+                        </td>
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleApproveReadmission(p.id, p.pf_no)}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Approve Re-admission</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectReadmission(p.id, p.pf_no)}
+                              className="px-2.5 py-1.5 rounded-lg border border-red-300 hover:bg-red-50 text-red-700 text-xs font-medium transition-all cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}

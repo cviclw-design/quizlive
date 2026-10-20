@@ -109,7 +109,12 @@ export interface ParticipantData {
   designation: string;
   department: string;
   unit: string;
+  mobile?: string;
   password?: string;
+  status?: 'active' | 'quit' | 'pending_approval';
+  quit_at?: string;
+  quit_reason?: string;
+  readmission_requested_at?: string;
 }
 
 export interface QuizQuestionData {
@@ -351,8 +356,9 @@ class ApiService {
     });
   }
 
-  public async getCertificate(pf: string) {
-    return this.request<{ ok: boolean; certificate: CertificateData }>(`/certificate?pf=${encodeURIComponent(pf)}`, {
+  public async getCertificate(pf: string, pass?: string) {
+    const q = pass ? `&pass=${encodeURIComponent(pass)}` : '';
+    return this.request<{ ok: boolean; certificate: CertificateData }>(`/certificate?pf=${encodeURIComponent(pf)}${q}`, {
       method: 'GET'
     });
   }
@@ -800,6 +806,77 @@ class ApiService {
     return this.request<{ ok: boolean; message: string }>('/admin/db/' + encodeURIComponent(table) + '/delete', {
       method: 'POST',
       body: JSON.stringify({ id })
+    });
+  }
+
+  // Participant Quit & Re-admission
+  public async quitQuizPermanently(pf: string, reason?: string) {
+    return this.request<{ ok: boolean; message: string; participant: ParticipantData }>('/user/quit_permanently', {
+      method: 'POST',
+      body: JSON.stringify({ pf, reason })
+    });
+  }
+
+  public async requestReadmission(pf: string, password?: string, note?: string) {
+    return this.request<{ ok: boolean; message: string; participant: ParticipantData }>('/user/request_readmission', {
+      method: 'POST',
+      body: JSON.stringify({ pf, password, note })
+    });
+  }
+
+  public async getMyResults(pf: string, password?: string) {
+    const params = new URLSearchParams({ pf });
+    if (password) params.set('password', password);
+    return this.request<{
+      ok: boolean;
+      participant: ParticipantData;
+      attempt: {
+        id: number;
+        status: string;
+        score: number | null;
+        max_score: number;
+        percentage?: number | null;
+        rank?: number;
+        duration_seconds?: number;
+        submitted_at: string | null;
+      } | null;
+      questions: Array<{
+        question_index: number;
+        question_id: number;
+        question_text: string;
+        department: string;
+        options: string[];
+        selected_option_index: number;
+        selected_option_text: string;
+        correct_option_index: number;
+        correct_option_text: string;
+        is_correct: boolean;
+        is_skipped: boolean;
+        points_awarded: number;
+      }>;
+    }>(`/participant/my_results?${params.toString()}`, {
+      method: 'GET'
+    });
+  }
+
+  // Admin Readmission endpoints
+  public async adminGetReadmissions() {
+    return this.request<{ ok: boolean; readmissions: any[] }>('/admin/readmissions', {
+      method: 'GET'
+    });
+  }
+
+  public async adminApproveReadmission(participantId: number) {
+    return this.request<{ ok: boolean; message: string; participant: any }>('/admin/readmissions/approve', {
+      method: 'POST',
+      body: JSON.stringify({ participant_id: participantId })
+    });
+  }
+
+  public async adminRejectReadmission(participantId: number, reason?: string) {
+    return this.request<{ ok: boolean; message: string }>('/admin/readmissions/reject', {
+      method: 'POST',
+      body: JSON.stringify({ participant_id: participantId, reason })
     });
   }
 }

@@ -310,30 +310,20 @@ export const CertificateView: React.FC<CertificateProps> = ({
       // Official Stamp on bottom left
       drawOfficialStamp(ctx, 320, 1180, certificateId, date);
 
-      // Right: SDGM & CVO Signature Block
-      if (signaturePhoto) {
-        const sigImg = new Image();
-        sigImg.crossOrigin = 'anonymous';
-        sigImg.onload = () => {
-          ctx.drawImage(sigImg, 1340, 1070, 240, 85);
-          drawSignText();
-        };
-        sigImg.onerror = () => {
-          drawScriptFallback();
-          drawSignText();
-        };
-        sigImg.src = signaturePhoto;
-      } else {
-        drawScriptFallback();
-        drawSignText();
-      }
+      // Right: SDGM & CVO Official Digitally Authorized Sign-off
+      drawScriptFallback();
+      drawSignText();
 
       function drawScriptFallback() {
         if (!ctx) return;
         ctx.textAlign = 'center';
+        ctx.fillStyle = '#0b6b3a';
+        ctx.font = 'bold 18px Outfit, sans-serif';
+        ctx.fillText('✓ Sd/- Digitally Authorized', 1460, 1090);
+
         ctx.fillStyle = '#071a3a';
-        ctx.font = 'italic 46px Georgia, serif';
-        ctx.fillText(cvoName || 'Sugind Surendran', 1460, 1130);
+        ctx.font = 'italic bold 46px Georgia, serif';
+        ctx.fillText(cvoName || 'Sugind Surendran', 1460, 1140);
       }
 
       function drawSignText() {
